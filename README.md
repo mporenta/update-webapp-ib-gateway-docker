@@ -55,14 +55,6 @@ NGROK_AUTH: Authentication Token for NGROK as needed. (optional)
 ```
 
 
-Copy your GitHub SSH key into the config directory in order to access:
-
-```
-copy id_rsa stable/tbot
-copy id_rsa_pub stable/tbot
-```
-
-
 Once these steps are complete, you can run Tbot on Tradingboat Docker using the following command:
 
 ```
