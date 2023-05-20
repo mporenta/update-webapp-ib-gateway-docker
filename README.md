@@ -86,4 +86,19 @@ Then go to http://127.0.0.1:5000
 ![WEBAPP_TVWB_TBOT_DECODER](https://user-images.githubusercontent.com/1986788/226739163-9b8fa027-fbeb-486e-9ca2-fa6aadf28fb2.png)
 
 
+## Reference
+* [TBOT on TradingBoat: Unleash the Power of Automated Trading](https://tbot.plusgenie.com/unleash-the-power-of-automated-trading)
+* [Brief Introduction to Trading Systems: Overcoming Challenges and Unlocking Potential #1](https://tbot.plusgenie.com/brief-introduction-to-trading-systems-overcoming-challenges-and-unlocking-potential)
+* [Brief Introduction to Trading Systems: Overcoming Challenges and Unlocking Potential #2](https://tbot.plusgenie.com/brief-introduction-to-trading-systems-overcoming-challenges-and-unlocking-potential-2)
+* [Brief Introduction to Trading Systems: Overcoming Challenges and Unlocking Potential #3](https://tbot.plusgenie.com/brief-introduction-to-trading-systems-overcoming-challenges-and-unlocking-potential-3)
+* [A Quick Demo of Trading Robot](https://tbot.plusgenie.com/a-quick-demo-of-tbot-on-tradingboat)
+---
+* [Harnessing the Power of Redis for Efficient Trading Operations: A Detailed Look at Redis Pub/Sub and Redis Stream - Part 1](https://tbot.plusgenie.com/harnessing-the-power-of-redis-for-efficient-trading-operations-a-detailed-look-at-redis-pub-sub-and-redis-stream)
 
+* [Harnessing the Power of Redis for Efficient Trading Operations: A Detailed Look at Redis Pub/Sub and Redis Stream- Part 2](https://tbot.plusgenie.com/harnessing-the-power-of-redis-for-efficient-trading-operations-a-detailed-look-at-redis-pub-sub-and-redis-stream-part-2/)
+
+* [Optimizing Execution Time: Improving TradingView to Interactive Brokers Delay with AWS Cloud](https://tbot.plusgenie.com/optimizing-execution-time-improving-tradingview-to-interactive-brokers-delay-with-aws-cloud)
+
+* [Decoding TradingView Alerts and Mastering ib_insync: A Comprehensive Guide](https://tbot.plusgenie.com/decoding-tradingview-alerts-and-mastering-ib_insync-a-comprehensive-guide)<br>
+---
+* [The extensive instructions and invaluable insights, enabling you to effectively leverage TBOT for your trading activities](https://www.udemy.com/course/simple-and-fast-trading-robot-setup-with-docker-tradingview/)
