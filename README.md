@@ -24,10 +24,6 @@ Some environment variables used for the docker are inherited from Interactive Br
 
 ### How to Build Docker
 
-Once you have obtained access permission to https://github.com/PlusGenie/tbot-tradingboat , follow the steps below:
-
-To build Docker, follow the steps below after obtaining access permission to https://github.com/PlusGenie/tbot-tradingboat :
-
 Clone the repository:
 
 ```
