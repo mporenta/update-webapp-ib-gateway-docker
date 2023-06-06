@@ -47,11 +47,15 @@ services:
     container_name: redis-on-tradingboat
 
   ngrok:
-    image: wernight/ngrok:latest
+    image: ngrok/ngrok:3
     restart: always
     container_name: ngrok-on-tradingboat
+    command:
+      - http
+      - "${NGROK_PORT}"
     ports:
       - "4040:4040"
     environment:
-      NGROK_AUTH: ${NGROK_AUTH:-}
+      NGROK_AUTHTOKEN: ${NGROK_AUTH}
+      NGROK_REGION: us
       NGROK_PORT: ${NGROK_PORT:-}
