@@ -3,18 +3,18 @@
 
 This repository is a customized version of [Interactive Brokers Gateway Docker](https://github.com/UnusualAlpha/ib-gateway-docker) , forked to meet specific requirements for educational materials.
 
-## Interactive Brokers Gateway Docker
+## About Interactive Brokers Gateway Docker
 
 Interactive Brokers Gateway Docker is a docker image that enables the running of the Interactive Brokers Gateway Application without any human interaction on a docker container.
 
-The original TVWB can be found on GitHub at [Interactive Brokers Gateway Docker](https://github.com/UnusualAlpha/ib-gateway-docker)
+The original project can be found on GitHub at [Interactive Brokers Gateway Docker](https://github.com/UnusualAlpha/ib-gateway-docker)
 
 
-## What is this repository?
+## About this Repository
 
-This repository allows for the quick launch of TradingBoat using Docker. TradingBoat is a trading platform that receives orders from TradingView Webhook and places them into IB Gateway or TWS. The platform can use NGROK, Flask(TVWB), Redis, TBOT, and IB Gateway.
+This repository allows for the quick launch of TradingBoat using Docker. TradingBoat is a trading platform that receives alert messages via webhooks from TradingView and translates these into orders for Interactive Brokers. TradingBoat utilizes NGROK, Flask (TVWB), Redis, TBOT, and the IB Gateway as depicted in the images below.
 
-Some environment variables used for the docker are inherited from Interactive Brokers Gateway Docker. It also includes its own environment variables that control other components such as NGROK, Flask, Redis, and TBOT.
+Some of the environment variables used for the Docker configuration are inherited from the Interactive Brokers Gateway Docker project. Additionally, this repository introduces its own environment variables that control other components such as NGROK, Flask, Redis, and TBOT.
 
 ![TradingBoat-Docker](https://user-images.githubusercontent.com/1986788/226738416-4fe3275b-e116-4f6e-9372-0aea9f4ee9fd.png)
 
@@ -23,10 +23,6 @@ Some environment variables used for the docker are inherited from Interactive Br
 ## How to Run Tbot on TradingBoat Docker
 
 ### How to Build Docker
-
-Once you have obtained access permission to https://github.com/PlusGenie/tbot-tradingboat , follow the steps below:
-
-To build Docker, follow the steps below after obtaining access permission to https://github.com/PlusGenie/tbot-tradingboat :
 
 Clone the repository:
 
@@ -85,6 +81,8 @@ Then go to http://127.0.0.1:5000
 
 ![WEBAPP_TVWB_TBOT_DECODER](https://user-images.githubusercontent.com/1986788/226739163-9b8fa027-fbeb-486e-9ca2-fa6aadf28fb2.png)
 
+### Demo 
+Here's how to launch TBOT on TradingBoat using Docker in just 5 minutes. [Watch the demo on YouTube.](https://www.youtube.com/watch?v=lHgoKOgaiw4)
 
 ## Reference
 * [TBOT on TradingBoat: Unleash the Power of Automated Trading](https://tbot.plusgenie.com/unleash-the-power-of-automated-trading)
