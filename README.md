@@ -85,6 +85,7 @@ Then go to http://127.0.0.1:5000
 Here's how to launch TBOT on TradingBoat using Docker in just 5 minutes. [Watch the demo on YouTube.](https://www.youtube.com/watch?v=lHgoKOgaiw4)
 
 ## Reference
+* [Deploying TradingBoat Docker on a Public Cloud Computer Using AWS EC2](https://tbot.plusgenie.com/deploying-tradingboat-docker-on-a-public-cloud-computer-using-aws-ec2)
 * [TBOT on TradingBoat: Unleash the Power of Automated Trading](https://tbot.plusgenie.com/unleash-the-power-of-automated-trading)
 * [Brief Introduction to Trading Systems: Overcoming Challenges and Unlocking Potential #1](https://tbot.plusgenie.com/brief-introduction-to-trading-systems-overcoming-challenges-and-unlocking-potential)
 * [Brief Introduction to Trading Systems: Overcoming Challenges and Unlocking Potential #2](https://tbot.plusgenie.com/brief-introduction-to-trading-systems-overcoming-challenges-and-unlocking-potential-2)
