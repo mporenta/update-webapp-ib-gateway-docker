@@ -74,7 +74,8 @@ RUN apt-get install --no-install-recommends --yes \
   tmux \
   openssh-client \
   net-tools \
-  vim
+  vim \
+  dos2unix
 
 # Copy files
 COPY --from=setup /root/ .
@@ -145,4 +146,5 @@ RUN pip install -r requirements.txt
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
 
 # Start run script
+RUN dos2unix /home/tbot/tbot_run.sh
 CMD ["/home/tbot/tbot_run.sh"]
