@@ -1,2 +1,5 @@
-/.env
-stable/tbot/id_rsa*
+# Ignore .env files in the entire repository
+**/.env
+
+# Ignore SSH private keys in the entire repository
+id_rsa*

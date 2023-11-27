@@ -6,6 +6,8 @@ services:
     container_name: tbot-on-tradingboat
     build:
       context: ./stable
+      args:
+        TBOT_TRADINGBOAT_GIT_REPO: ${TBOT_TRADINGBOAT_GIT_REPO:-https://github.com/PlusGenie/tbot-tradingboat.git}
     environment:
       TWS_USERID: ${TWS_USERID}
       TWS_PASSWORD: ${TWS_PASSWORD}

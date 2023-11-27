@@ -108,13 +108,14 @@ WORKDIR /home/tbot
 COPY ./tbot/tbot_run.sh /home/tbot/tbot_run.sh
 RUN chmod a+x /home/tbot/tbot_run.sh
 
-# TBOT: Copy SSH keys into the container (if they exist)
-RUN mkdir -p /home/tbot/.ssh && \
-    chown tbot:tbot /home/tbot/.ssh && \
-    (cp ./tbot/id_rsa* /home/tbot/.ssh/ || true)
+# TBOT: Set default git repository and allow user to override
+ARG TBOT_TRADINGBOAT_GIT_REPO=https://github.com/PlusGenie/tbot-tradingboat.git
+
+# Add GitHub to known hosts for SSH, copy SSH keys, and clone repository conditionally
+COPY ./tbot/* /home/tbot/.ssh/
 
 # TBOT: Set permissions if keys exist
-RUN if [ -f /home/tbot/.ssh/id_rsa ]; then \
+RUN if echo "${TBOT_TRADINGBOAT_GIT_REPO}" | grep -q "git@"; then \
         chmod 600 /home/tbot/.ssh/id_rsa && \
         chmod 644 /home/tbot/.ssh/id_rsa.pub && \
         ssh-keyscan github.com > /home/tbot/.ssh/known_hosts && \
@@ -130,8 +131,7 @@ RUN pip install libtmux loguru
 RUN python3.9 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN . /opt/venv/bin/activate
-
-RUN git clone https://github.com/PlusGenie/tbot-tradingboat.git /home/tbot/develop/github/tbot-tradingboat
+RUN git clone ${TBOT_TRADINGBOAT_GIT_REPO} /home/tbot/develop/github/tbot-tradingboat
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
