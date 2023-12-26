@@ -114,10 +114,14 @@ ARG TBOT_TRADINGBOAT_GIT_REPO=https://github.com/PlusGenie/tbot-tradingboat.git
 # Add GitHub to known hosts for SSH, copy SSH keys, and clone repository conditionally
 COPY ./tbot/* /home/tbot/.ssh/
 
+# Copy the script to detect and copy the SSH key
+COPY ./tbot/copy_ssh_key.sh /home/tbot/copy_ssh_key.sh
+RUN chmod +x /home/tbot/copy_ssh_key.sh
+
 # TBOT: Set permissions if keys exist
 RUN if echo "${TBOT_TRADINGBOAT_GIT_REPO}" | grep -q "git@"; then \
+        /home/tbot/copy_ssh_key.sh && \
         chmod 600 /home/tbot/.ssh/id_rsa && \
-        chmod 644 /home/tbot/.ssh/id_rsa.pub && \
         ssh-keyscan github.com > /home/tbot/.ssh/known_hosts && \
         git config --global user.email "you@example.com" && \
         git config --global user.name "Your Name" && \
