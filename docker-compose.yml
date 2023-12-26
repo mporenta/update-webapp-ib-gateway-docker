@@ -49,7 +49,7 @@ services:
     container_name: redis-on-tradingboat
 
   ngrok:
-    image: ngrok/ngrok:3
+    image: ngrok/ngrok:3.5.0-alpine
     restart: always
     container_name: ngrok-on-tradingboat
     command:
