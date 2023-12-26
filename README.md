@@ -47,7 +47,7 @@ TWS_PASSWORD: The password used to log in to TWS / IB Gateway
 
 VNC_SERVER_PASSWORD
 
-NGROK_AUTH: Authentication Token for NGROK as needed. (optional)
+NGROK_AUTH: Authentication Token for NGROK as needed.
 ```
 
 
