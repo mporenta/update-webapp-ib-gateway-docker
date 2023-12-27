@@ -89,12 +89,10 @@ ENV IBC_PATH /root/ibc
 ENV IBC_INI /root/ibc/config.ini
 ENV TWOFA_TIMEOUT_ACTION exit
 
-# TBOT: Install Python 3.9 and venv
 RUN apt-get install -y software-properties-common && \
     add-apt-repository -y ppa:deadsnakes/ppa
 
-# TBOT: Set python3.9 as a default python3
-# TBOT: Set python3.9 as the default python3
+# TBOT: Set python3.9 as a default python
 RUN apt-get install -y python3.9 python3.9-venv python3.9-dev python3.9-distutils python3-pip && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
 
@@ -110,6 +108,10 @@ RUN chmod a+x /home/tbot/tbot_run.sh
 
 # TBOT: Set default git repository and allow user to override
 ARG TBOT_TRADINGBOAT_GIT_REPO=https://github.com/PlusGenie/tbot-tradingboat.git
+ARG TBOT_TRADINGBOAT_GIT_BRANCH=main
+
+ARG TBOT_TVWB_GIT_REPO=https://github.com/PlusGenie/tradingview-webhooks-bot.git
+ARG TBOT_TVWB_GIT_BRANCH=main
 
 # Add GitHub to known hosts for SSH, copy SSH keys, and clone repository conditionally
 COPY ./tbot/* /home/tbot/.ssh/
@@ -135,14 +137,14 @@ RUN pip install libtmux loguru
 RUN python3.9 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN . /opt/venv/bin/activate
-RUN git clone ${TBOT_TRADINGBOAT_GIT_REPO} /home/tbot/develop/github/tbot-tradingboat
+RUN git clone -b ${TBOT_TRADINGBOAT_GIT_BRANCH} ${TBOT_TRADINGBOAT_GIT_REPO} /home/tbot/develop/github/tbot-tradingboat
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
 RUN pip install -e .
 RUN chmod a+x /home/tbot/develop/github/tbot-tradingboat/tbottmux/*.sh
 
-RUN git clone https://github.com/PlusGenie/tradingview-webhooks-bot.git /home/tbot/develop/github/tradingview-webhooks-bot
+RUN git clone -b ${TBOT_TVWB_GIT_BRANCH} ${TBOT_TVWB_GIT_REPO} /home/tbot/develop/github/tradingview-webhooks-bot
 WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
