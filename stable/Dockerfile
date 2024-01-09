@@ -8,6 +8,7 @@
 
 FROM ubuntu:22.04 as setup
 
+
 ENV IB_GATEWAY_VERSION=10.23.2a
 ENV IB_GATEWAY_RELEASE_CHANNEL=latest
 ENV IBC_VERSION=3.17.0
@@ -151,6 +152,10 @@ RUN pip install -r requirements.txt
 # TBOT: Set the default directory
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
 
+COPY ./scripts/fork_ports_delayed.sh /root/scripts/fork_ports_delayed.sh
+COPY ./scripts/run_x11_vnc.sh /root/scripts/run_x11_vnc.sh
+RUN dos2unix /root/scripts/*.sh && chmod a+x /root/scripts/*.sh
+
 # Start run script
-RUN dos2unix /home/tbot/tbot_run.sh
+RUN dos2unix /home/tbot/tbot_run.sh && chmod a+x /home/tbot/tbot_run.sh
 CMD ["/home/tbot/tbot_run.sh"]
