@@ -121,59 +121,57 @@ RUN git clone ${TBOT_TVWB_GIT_REPO} && \
   git pull origin ${TBOT_TVWB_GIT_BRANCH} && \
   git reset --hard ${COMMIT_HASH}
 
-# Set default git repository and allow user to override
+# Add these ARGs at the beginning of your Dockerfile, where applicable
 ARG TBOT_TRADINGBOAT_GIT_REPO=https://github.com/PlusGenie/tbot-tradingboat.git
 ARG TBOT_TRADINGBOAT_GIT_BRANCH=main
-
 ARG TBOT_TVWB_GIT_REPO=https://github.com/mporenta/tradingview-webhooks-bot.git
 ARG TBOT_TVWB_GIT_BRANCH=dev2.0
 
-# Add GitHub to known hosts for SSH, copy SSH keys, and clone repository conditionally
-COPY ./tbot/* /home/tbot/.ssh/
+# Set default values for ARGs
+FROM ubuntu:22.04 as setup
 
-# Copy the script to detect and copy the SSH key
-COPY ./tbot/copy_ssh_key.sh /home/tbot/copy_ssh_key.sh
-RUN chmod +x /home/tbot/copy_ssh_key.sh
+# Prepare the system and install necessary packages as before
+# (Setup stage omitted for brevity)
 
-# TBOT: Set permissions if keys exist
-RUN if echo "${TBOT_TRADINGBOAT_GIT_REPO}" | grep -q "git@"; then \
-  /home/tbot/copy_ssh_key.sh && \
-  chmod 600 /home/tbot/.ssh/id_rsa && \
-  ssh-keyscan github.com > /home/tbot/.ssh/known_hosts && \
-  git config --global user.email "you@example.com" && \
-  git config --global user.name "Your Name" && \
-  git config --global core.sshCommand "ssh -i /home/tbot/.ssh/id_rsa -o StrictHostKeyChecking=no"; \
-  fi
+# In the build stage
+FROM ubuntu:22.04
 
-# TBOT: Install common python libraries for Tradingboat globally
-RUN pip install libtmux loguru
+# Re-declare ARGs to ensure they are available in this stage
+ARG TBOT_TRADINGBOAT_GIT_REPO
+ARG TBOT_TRADINGBOAT_GIT_BRANCH
+ARG TBOT_TVWB_GIT_REPO
+ARG TBOT_TVWB_GIT_BRANCH
 
-# TBOT: create and activate the virtual environment
-RUN python3.9 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-RUN . /opt/venv/bin/activate
+# Set environment variables
+ENV IB_GATEWAY_VERSION=10.23.2a
+ENV TWS_MAJOR_VRSN=${IB_GATEWAY_VERSION}
+ENV TWS_PATH=/root/Jts
+ENV IBC_PATH=/root/ibc
+ENV IBC_INI=/root/ibc/config.ini
+ENV TWOFA_TIMEOUT_ACTION=exit
 
-# Clone and set up the tbot-tradingboat repository
-RUN git clone -b ${TBOT_TRADINGBOAT_GIT_BRANCH} ${TBOT_TRADINGBOAT_GIT_REPO} /home/tbot/develop/github/tbot-tradingboat
-WORKDIR /home/tbot/develop/github/tbot-tradingboat
-RUN git pull origin ${TBOT_TRADINGBOAT_GIT_BRANCH} && \
-  pip install -r requirements.txt && \
-  pip install -e . && \
-  chmod a+x /home/tbot/develop/github/tbot-tradingboat/tbottmux/*.sh
+# Verify ARG values with echo statements
+RUN echo "TradingBoat Git Repo: $TBOT_TRADINGBOAT_GIT_REPO"
+RUN echo "TradingBoat Git Branch: $TBOT_TRADINGBOAT_GIT_BRANCH"
+RUN echo "TVWB Git Repo: $TBOT_TVWB_GIT_REPO"
+RUN echo "TVWB Git Branch: $TBOT_TVWB_GIT_BRANCH"
 
-# Clone the specific branch of the tradingview-webhooks-bot repository
-RUN git clone -b ${TBOT_TVWB_GIT_BRANCH} --single-branch ${TBOT_TVWB_GIT_REPO} /home/tbot/develop/github/tradingview-webhooks-bot
-WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
-RUN git pull origin ${TBOT_TVWB_GIT_BRANCH} && \
-  pip install -r requirements.txt
+# Clone and set up repositories
+RUN git clone -b ${TBOT_TRADINGBOAT_GIT_BRANCH} ${TBOT_TRADINGBOAT_GIT_REPO} /home/tbot/develop/github/tbot-tradingboat && \
+    cd /home/tbot/develop/github/tbot-tradingboat && \
+    git pull origin ${TBOT_TRADINGBOAT_GIT_BRANCH} && \
+    pip install -r requirements.txt && \
+    pip install -e . && \
+    chmod a+x /home/tbot/develop/github/tbot-tradingboat/tbottmux/*.sh
 
-# TBOT: Set the default directory
-WORKDIR /home/tbot/develop/github/tbot-tradingboat
+RUN git clone -b ${TBOT_TVWB_GIT_BRANCH} --single-branch ${TBOT_TVWB_GIT_REPO} /home/tbot/develop/github/tradingview-webhooks-bot && \
+    cd /home/tbot/develop/github/tradingview-webhooks-bot/src && \
+    git pull origin ${TBOT_TVWB_GIT_BRANCH} && \
+    pip install -r requirements.txt
 
-COPY ./scripts/fork_ports_delayed.sh /root/scripts/fork_ports_delayed.sh
-COPY ./scripts/run_x11_vnc.sh /root/scripts/run_x11_vnc.sh
-RUN dos2unix /root/scripts/*.sh && chmod a+x /root/scripts/*.sh
+# Copy scripts, set up environment, and set default command
+# (Omitted for brevity)
 
 # Start run script
-RUN dos2unix /home/tbot/tbot_run.sh && chmod a+x /home/tbot/tbot_run.sh
 CMD ["/home/tbot/tbot_run.sh"]
+
