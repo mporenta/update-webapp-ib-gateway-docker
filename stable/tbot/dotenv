@@ -76,8 +76,9 @@ TBOT_PROFILER=True
 #-------------------------------------------------------------------
 # NGROK address for Flask HTTP GET for development
 #-------------------------------------------------------------------
-TBOT_NGROK=https://48c7-2-223-40-135.eu.ngrok.io
-
+TBOT_NGROK=http://34.221.94.1:4040
+NGROK_AUTH=2jXJ5urtv8foA5V1vd9yx2W9SLw_2p9wv5xUE176CemxKTjaP
+NGROK_PORT=ib-gateway:5000
 #-------------------------------------------------------------------
 # TradingView, Interactive Brokers, and General Account Settings
 #-------------------------------------------------------------------
