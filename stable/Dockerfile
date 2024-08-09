@@ -1,13 +1,11 @@
-
 #
 # Setup Stage: install apps
 #
-# This is a dedicated stage so that donwload archives don't end up on 
-# production image and consume unnecessary space.
+# This is a dedicated stage so that download archives don't end up on 
+# the production image and consume unnecessary space.
 #
 
 FROM ubuntu:22.04 as setup
-
 
 ENV IB_GATEWAY_VERSION=10.23.2a
 ENV IB_GATEWAY_RELEASE_CHANNEL=latest
@@ -24,7 +22,7 @@ WORKDIR /tmp/setup
 
 # Install IB Gateway
 # Use this instead of "RUN curl .." to install a local file:
-#COPY ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh .
+# COPY ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh .
 RUN curl -sSL https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh \
   --output ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh
 RUN curl -sSL https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256 \
@@ -111,8 +109,8 @@ RUN chmod a+x /home/tbot/tbot_run.sh
 ARG TBOT_TRADINGBOAT_GIT_REPO=https://github.com/PlusGenie/tbot-tradingboat.git
 ARG TBOT_TRADINGBOAT_GIT_BRANCH=main
 
-ARG TBOT_TVWB_GIT_REPO=https://github.com/PlusGenie/tradingview-webhooks-bot.git
-ARG TBOT_TVWB_GIT_BRANCH=main
+ARG TBOT_TVWB_GIT_REPO=https://github.com/mporenta/tradingview-webhooks-bot.git
+ARG TBOT_TVWB_GIT_BRANCH=dev2.0
 
 # Add GitHub to known hosts for SSH, copy SSH keys, and clone repository conditionally
 COPY ./tbot/* /home/tbot/.ssh/
@@ -138,17 +136,38 @@ RUN pip install libtmux loguru
 RUN python3.9 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN . /opt/venv/bin/activate
-RUN git clone -b ${TBOT_TRADINGBOAT_GIT_BRANCH} ${TBOT_TRADINGBOAT_GIT_REPO} /home/tbot/develop/github/tbot-tradingboat
+
+# Clone or update tbot-tradingboat repository
+RUN mkdir -p /home/tbot/develop/github/tbot-tradingboat
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
+RUN if [ -d .git ]; then \
+      git fetch origin ${TBOT_TRADINGBOAT_GIT_BRANCH} && \
+      git checkout ${TBOT_TRADINGBOAT_GIT_BRANCH} && \
+      git pull origin ${TBOT_TRADINGBOAT_GIT_BRANCH}; \
+    else \
+      git clone --branch ${TBOT_TRADINGBOAT_GIT_BRANCH} ${TBOT_TRADINGBOAT_GIT_REPO} .; \
+    fi
+
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
 RUN pip install -e .
 RUN chmod a+x /home/tbot/develop/github/tbot-tradingboat/tbottmux/*.sh
 
-RUN git clone -b ${TBOT_TVWB_GIT_BRANCH} ${TBOT_TVWB_GIT_REPO} /home/tbot/develop/github/tradingview-webhooks-bot
+# Clone or update tradingview-webhooks-bot repository
+RUN mkdir -p /home/tbot/develop/github/tradingview-webhooks-bot
+WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot
+RUN if [ -d .git ]; then \
+      git fetch origin ${TBOT_TVWB_GIT_BRANCH} && \
+      git checkout ${TBOT_TVWB_GIT_BRANCH} && \
+      git pull origin ${TBOT_TVWB_GIT_BRANCH}; \
+    else \
+      git clone --branch ${TBOT_TVWB_GIT_BRANCH} ${TBOT_TVWB_GIT_REPO} .; \
+    fi
+
 WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
+
 # TBOT: Set the default directory
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
 
