@@ -20,7 +20,7 @@ TBOT_PRODUCTION=False
 TBOT_REDIS_PASSWORD=foobared
 # Redis Unix Domain Socket instead of TCP/IP
 TBOT_REDIS_UNIXDOMAIN_SOCK=/var/run/redis/redis-server.sock
-TBOT_REDIS_HOST=54.245.139.152
+TBOT_REDIS_HOST=34.221.94.1
 TBOT_REDIS_PORT=6379
 # Choose either Redis Stream or Redis PubSub
 TBOT_USES_REDIS_STREAM=1
@@ -39,7 +39,7 @@ TBOT_DB_OFFICE=/tmp/tbot/tbot_sqlite3
 #-------------------------------------------------------------------
 TBOT_IBKR_PORT=7497
 TBOT_IBKR_CLIENTID=1
-TBOT_IBKR_IPADDR=54.245.139.152
+TBOT_IBKR_IPADDR=34.221.94.1
 
 
 #-------------------------------------------------------------------
@@ -62,7 +62,7 @@ TBOT_TELEGRAM_CHAT_ID=5235531783
 #-------------------------------------------------------------------
 # TBOT PYTEST
 #-------------------------------------------------------------------
-TBOT_PYTEST_IPADDR=http://54.245.139.152:5000/webhook
+TBOT_PYTEST_IPADDR=http://34.221.94.1:5000/webhook
 # For example, the waiting time until a webhook hits the Alert Database is set to 2 seconds.
 TBOT_PYTEST_WAIT_FOR_ALERT_DATABASE=2 
 # For example, the wait time until a webhook order is placed in the IB Gateway/TWS is 5 seconds.
@@ -98,7 +98,7 @@ TBOT_LOGFILE=/tmp/tbot_log.txt
 # Configure Redis (Stream and Security Configurations)
 #-------------------------------------------------------------------
 TBOT_REDIS_PASSWORD=foobared
-TBOT_REDIS_HOST=54.245.139.152
+TBOT_REDIS_HOST=34.221.94.1
 TBOT_REDIS_PORT=6379
 TBOT_USES_REDIS_STREAM=1
 TBOT_REDIS_READ_TIMEOUT_MS=40
@@ -114,7 +114,7 @@ TBOT_DB_OFFICE=/tmp/tbot/tbot_sqlite3
 #-------------------------------------------------------------------
 TBOT_IBKR_PORT=7497
 TBOT_IBKR_CLIENTID=1
-TBOT_IBKR_IPADDR=54.245.139.152
+TBOT_IBKR_IPADDR=34.221.94.1
 
 #-------------------------------------------------------------------
 # Security and Debugging Settings
