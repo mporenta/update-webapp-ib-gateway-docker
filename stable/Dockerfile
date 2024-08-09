@@ -108,6 +108,9 @@ RUN apt-get update && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip and setuptools
+RUN pip install --upgrade pip setuptools
+
 # Create a non-root user and set its home directory
 RUN useradd -m tbot
 
