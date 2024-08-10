@@ -54,15 +54,9 @@ services:
     image: ngrok/ngrok:3.5.0-alpine
     restart: always
     container_name: ngrok-on-tradingboat
-    command:
-      - tunnel
-      - http
-      - "ib-gateway:5000"
-      - "--label"
-      - "edge=edghts_2kU4EVKhL8kmI81z3YeVd6sna9Y"
+    command: tunnel --label edge=edghts_2kU4EVKhL8kmI81z3YeVd6sna9Y ib-gateway:5000
     ports:
       - "4040:4040"
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTH}
       NGROK_REGION: us
-      NGROK_PORT: ${NGROK_PORT:-}
