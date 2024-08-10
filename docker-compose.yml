@@ -26,7 +26,7 @@ services:
       TBOT_REDIS_READ_TIMEOUT_MS: ${TBOT_REDIS_READ_TIMEOUT_MS:-10}
       TBOT_IBKR_PORT: ${TBOT_IBKR_PORT:-4001}
       TBOT_IBKR_CLIENTID: ${TBOT_IBKR_CLIENTID:-1}
-      TBOT_IBKR_IPADDR: ${TBOT_IBKR_IPADDR:-}
+      TBOT_IBKR_IPADDR: ${TBOT_IBKR_IPADDR:-127.0.0.1}
       TBOT_DB_HOME: ${TBOT_DB_HOME:-}
       TBOT_DB_OFFICE: ${TBOT_DB_OFFICE:-}
       TBOT_DISCORD_WEBHOOK: ${TBOT_DISCORD_WEBHOOK:-}
@@ -35,10 +35,10 @@ services:
       TBOT_NGROK: ${TBOT_NGROK:-}
       TBOT_PROFILER: ${TBOT_PROFILER:-False}
     ports:
-      - "4001:4001"
-      - "4002:4002"
-      - "5900:5900"
-      - "5000:5000"
+      - "127.0.0.1:4001:4001"
+      - "127.0.0.1:4002:4002"
+      - "0.0.0.0:5900:5900"
+      - "0.0.0.0:5000:5000"
     depends_on:
       - redis
       - ngrok
@@ -48,15 +48,18 @@ services:
     restart: always
     container_name: redis-on-tradingboat
     ports:
-      - "6379:6379"
+      - "0.0.0.0:6379:6379"
 
   ngrok:
     image: ngrok/ngrok:3.5.0-alpine
     restart: always
     container_name: ngrok-on-tradingboat
     command:
+      - tunnel
       - http
-      - "${NGROK_PORT}"
+      - "ib-gateway:5000"
+      - "--label"
+      - "edge=edghts_2kU4EVKhL8kmI81z3YeVd6sna9Y"
     ports:
       - "4040:4040"
     environment:
