@@ -7,6 +7,9 @@
 
 FROM ubuntu:22.04 as setup
 
+# Define cache buster build argument
+ARG CACHE_BUST=1
+
 ENV IB_GATEWAY_VERSION=10.23.2a
 ENV IB_GATEWAY_RELEASE_CHANNEL=latest
 ENV IBC_VERSION=3.17.0
@@ -49,6 +52,9 @@ COPY ./scripts /root/scripts
 
 FROM ubuntu:22.04
 
+# Define cache buster build argument
+ARG CACHE_BUST=0
+
 ENV IB_GATEWAY_VERSION=10.23.2a
 
 WORKDIR /root
@@ -89,11 +95,11 @@ ENV IBC_INI /root/ibc/config.ini
 ENV TWOFA_TIMEOUT_ACTION exit
 
 RUN apt-get install -y software-properties-common && \
-    add-apt-repository -y ppa:deadsnakes/ppa
+  add-apt-repository -y ppa:deadsnakes/ppa
 
 # TBOT: Set python3.9 as a default python
 RUN apt-get install -y python3.9 python3.9-venv python3.9-dev python3.9-distutils python3-pip && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+  update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
 
 # TBOT: Create a non-root user and set its home directory
 RUN useradd -m tbot
@@ -110,8 +116,7 @@ ARG TBOT_TRADINGBOAT_GIT_REPO=https://github.com/PlusGenie/tbot-tradingboat.git
 ARG TBOT_TRADINGBOAT_GIT_BRANCH=main
 
 ARG TBOT_TVWB_GIT_REPO=https://github.com/mporenta/tradingview-webhooks-bot.git
-ARG TBOT_TVWB_GIT_BRANCH=dev2.0
-
+ARG TBOT_TVWB_GIT_BRANCH=update-ajax
 # Add GitHub to known hosts for SSH, copy SSH keys, and clone repository conditionally
 COPY ./tbot/* /home/tbot/.ssh/
 
@@ -121,13 +126,13 @@ RUN chmod +x /home/tbot/copy_ssh_key.sh
 
 # TBOT: Set permissions if keys exist
 RUN if echo "${TBOT_TRADINGBOAT_GIT_REPO}" | grep -q "git@"; then \
-        /home/tbot/copy_ssh_key.sh && \
-        chmod 600 /home/tbot/.ssh/id_rsa && \
-        ssh-keyscan github.com > /home/tbot/.ssh/known_hosts && \
-        git config --global user.email "you@example.com" && \
-        git config --global user.name "Your Name" && \
-        git config --global core.sshCommand "ssh -i /home/tbot/.ssh/id_rsa -o StrictHostKeyChecking=no"; \
-    fi
+  /home/tbot/copy_ssh_key.sh && \
+  chmod 600 /home/tbot/.ssh/id_rsa && \
+  ssh-keyscan github.com > /home/tbot/.ssh/known_hosts && \
+  git config --global user.email "you@example.com" && \
+  git config --global user.name "Your Name" && \
+  git config --global core.sshCommand "ssh -i /home/tbot/.ssh/id_rsa -o StrictHostKeyChecking=no"; \
+  fi
 
 # TBOT: Install common python libraries for Tradingboat globally
 RUN pip install libtmux loguru
@@ -141,12 +146,12 @@ RUN . /opt/venv/bin/activate
 RUN mkdir -p /home/tbot/develop/github/tbot-tradingboat
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
 RUN if [ -d .git ]; then \
-      git fetch origin ${TBOT_TRADINGBOAT_GIT_BRANCH} && \
-      git checkout ${TBOT_TRADINGBOAT_GIT_BRANCH} && \
-      git pull origin ${TBOT_TRADINGBOAT_GIT_BRANCH}; \
-    else \
-      git clone --branch ${TBOT_TRADINGBOAT_GIT_BRANCH} ${TBOT_TRADINGBOAT_GIT_REPO} .; \
-    fi
+  git fetch origin ${TBOT_TRADINGBOAT_GIT_BRANCH} && \
+  git checkout ${TBOT_TRADINGBOAT_GIT_BRANCH} && \
+  git pull origin ${TBOT_TRADINGBOAT_GIT_BRANCH}; \
+  else \
+  git clone --branch ${TBOT_TRADINGBOAT_GIT_BRANCH} ${TBOT_TRADINGBOAT_GIT_REPO} .; \
+  fi
 
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
@@ -157,12 +162,12 @@ RUN chmod a+x /home/tbot/develop/github/tbot-tradingboat/tbottmux/*.sh
 RUN mkdir -p /home/tbot/develop/github/tradingview-webhooks-bot
 WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot
 RUN if [ -d .git ]; then \
-      git fetch origin ${TBOT_TVWB_GIT_BRANCH} && \
-      git checkout ${TBOT_TVWB_GIT_BRANCH} && \
-      git pull origin ${TBOT_TVWB_GIT_BRANCH}; \
-    else \
-      git clone --branch ${TBOT_TVWB_GIT_BRANCH} ${TBOT_TVWB_GIT_REPO} .; \
-    fi
+  git fetch origin ${TBOT_TVWB_GIT_BRANCH} && \
+  git checkout ${TBOT_TVWB_GIT_BRANCH} && \
+  git pull origin ${TBOT_TVWB_GIT_BRANCH}; \
+  else \
+  git clone --branch ${TBOT_TVWB_GIT_BRANCH} ${TBOT_TVWB_GIT_REPO} .; \
+  fi
 
 WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
 # Install dependencies in the virtual environment
@@ -177,4 +182,8 @@ RUN dos2unix /root/scripts/*.sh && chmod a+x /root/scripts/*.sh
 
 # Start run script
 RUN dos2unix /home/tbot/tbot_run.sh && chmod a+x /home/tbot/tbot_run.sh
+
+# Add cache buster to force rebuild when needed
+RUN echo "Cache busting step: ${CACHE_BUST}"
+
 CMD ["/home/tbot/tbot_run.sh"]
