@@ -1,25 +1,26 @@
+
 #
 # Setup Stage: install apps
 #
-# This is a dedicated stage so that download archives don't end up on 
-# the production image and consume unnecessary space.
+# This is a dedicated stage so that donwload archives don't end up on 
+# production image and consume unnecessary space.
 #
 
 FROM ubuntu:22.04 as setup
-
 # Define cache buster build argument
 ARG CACHE_BUST=1
+
 
 ENV IB_GATEWAY_VERSION=10.23.2a
 ENV IB_GATEWAY_RELEASE_CHANNEL=latest
 ENV IBC_VERSION=3.17.0
 
 # Prepare system
-RUN apt-get update && apt-get install --no-install-recommends -y \
+RUN apt-get update -y
+RUN apt-get install --no-install-recommends --yes \
   curl \
   ca-certificates \
   unzip
-
 
 WORKDIR /tmp/setup
 
@@ -95,11 +96,11 @@ ENV IBC_INI /root/ibc/config.ini
 ENV TWOFA_TIMEOUT_ACTION exit
 
 RUN apt-get install -y software-properties-common && \
-  add-apt-repository -y ppa:deadsnakes/ppa
+    add-apt-repository -y ppa:deadsnakes/ppa
 
 # TBOT: Set python3.9 as a default python
 RUN apt-get install -y python3.9 python3.9-venv python3.9-dev python3.9-distutils python3-pip && \
-  update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
 
 # TBOT: Create a non-root user and set its home directory
 RUN useradd -m tbot
@@ -111,7 +112,7 @@ WORKDIR /home/tbot
 COPY ./tbot/tbot_run.sh /home/tbot/tbot_run.sh
 RUN chmod a+x /home/tbot/tbot_run.sh
 
-# TBOT: Set default git repository and allow user to override
+## TBOT: Set default git repository and allow user to override
 ARG TBOT_TRADINGBOAT_GIT_REPO=https://github.com/mporenta/tbot-tradingboat.git
 ARG TBOT_TRADINGBOAT_GIT_BRANCH=main
 
@@ -127,13 +128,13 @@ RUN chmod +x /home/tbot/copy_ssh_key.sh
 
 # TBOT: Set permissions if keys exist
 RUN if echo "${TBOT_TRADINGBOAT_GIT_REPO}" | grep -q "git@"; then \
-  /home/tbot/copy_ssh_key.sh && \
-  chmod 600 /home/tbot/.ssh/id_rsa && \
-  ssh-keyscan github.com > /home/tbot/.ssh/known_hosts && \
-  git config --global user.email "you@example.com" && \
-  git config --global user.name "Your Name" && \
-  git config --global core.sshCommand "ssh -i /home/tbot/.ssh/id_rsa -o StrictHostKeyChecking=no"; \
-  fi
+        /home/tbot/copy_ssh_key.sh && \
+        chmod 600 /home/tbot/.ssh/id_rsa && \
+        ssh-keyscan github.com > /home/tbot/.ssh/known_hosts && \
+        git config --global user.email "you@example.com" && \
+        git config --global user.name "Your Name" && \
+        git config --global core.sshCommand "ssh -i /home/tbot/.ssh/id_rsa -o StrictHostKeyChecking=no"; \
+    fi
 
 # TBOT: Install common python libraries for Tradingboat globally
 RUN pip install libtmux loguru
@@ -142,27 +143,17 @@ RUN pip install libtmux loguru
 RUN python3.9 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN . /opt/venv/bin/activate
-
 RUN git clone -b ${TBOT_TRADINGBOAT_GIT_BRANCH} ${TBOT_TRADINGBOAT_GIT_REPO} /home/tbot/develop/github/tbot-tradingboat
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
-RUN pip install .
+RUN pip install -e .
 RUN chmod a+x /home/tbot/develop/github/tbot-tradingboat/tbottmux/*.sh
-
-# Copy the local version of mypnl.py into the container
-COPY ./mypnl.py /home/tbot/develop/github/tbot-tradingboat/src/tbot_tradingboat/mypnl.py
-
 
 RUN git clone -b ${TBOT_TVWB_GIT_BRANCH} ${TBOT_TVWB_GIT_REPO} /home/tbot/develop/github/tradingview-webhooks-bot
 WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
-
-# Copy the local version of orders into the container
-COPY ./order_base.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/order_base.html
-COPY ./orders.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/orders.html
-
 # TBOT: Set the default directory
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
 
@@ -170,10 +161,9 @@ COPY ./scripts/fork_ports_delayed.sh /root/scripts/fork_ports_delayed.sh
 COPY ./scripts/run_x11_vnc.sh /root/scripts/run_x11_vnc.sh
 RUN dos2unix /root/scripts/*.sh && chmod a+x /root/scripts/*.sh
 
-# Start run script
-RUN dos2unix /home/tbot/tbot_run.sh && chmod a+x /home/tbot/tbot_run.sh
-
 # Add cache buster to force rebuild when needed
 RUN echo "Cache busting step: ${CACHE_BUST}"
 
+# Start run script
+RUN dos2unix /home/tbot/tbot_run.sh && chmod a+x /home/tbot/tbot_run.sh
 CMD ["/home/tbot/tbot_run.sh"]
