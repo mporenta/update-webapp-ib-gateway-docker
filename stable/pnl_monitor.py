@@ -11,7 +11,7 @@ logger.add("pnl_monitor.log", rotation="1 MB")
 # Configuration variables (can be set via environment variables)
 IBKR_HOST = os.environ.get('IBKR_HOST', '127.0.0.1')
 IBKR_PORT = int(os.environ.get('IBKR_PORT', '4002'))
-CLIENT_ID = int(os.environ.get('CLIENT_ID', '1')) + 2  # Ensure unique client ID
+CLIENT_ID = int(os.environ.get('CLIENT_ID', '2')) + 2  # Ensure unique client ID
 PNL_THRESHOLD = float(os.environ.get('PNL_THRESHOLD', '-1.0'))  # Default to -1%
 ACCOUNT = os.environ.get('ACCOUNT', '')  # If not set, will use the first account
 
@@ -59,14 +59,17 @@ class PnLMonitor:
 
     def subscribe_to_pnl(self):
         # Subscribe to account-level PnL updates
-        pnl = self.ib.reqPnL(self.account)
-        pnl.updateEvent += self.on_pnl_update
+        self.ib.reqPnL(self.account)
+        self.ib.pnlEvent += self.on_pnl_update
         logger.info("Subscribed to PnL updates.")
 
     def on_pnl_update(self, pnl: PnL):
         """
         Event handler for PnL updates.
         """
+        if pnl.account != self.account:
+            return  # Ignore updates for other accounts
+
         if self.action_taken:
             return
 
@@ -105,11 +108,9 @@ class PnLMonitor:
         # Wait for orders to be filled
         util.waitUntil(lambda: all(trade.isDone() for trade in close_orders), timeout=60)
 
-        # Cancel all open orders
-        open_orders = self.ib.openOrders()
-        for order in open_orders:
-            self.ib.cancelOrder(order)
-            logger.info(f"Cancelling order: {order.orderId}")
+        # Cancel all open orders using reqGlobalCancel
+        self.ib.reqGlobalCancel()
+        logger.info("All open orders have been canceled.")
 
         logger.info("All positions closed and open orders cancelled.")
 
