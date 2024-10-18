@@ -156,6 +156,8 @@ WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
 RUN pip install -r requirements.txt
 # TBOT: Set the default directory
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
+# Copy the PnL monitoring script into the TBOT_APP_HOME directory
+COPY ./pnl_monitor.py /home/tbot/develop/github/tbot-tradingboat/pnl_monitor.py
 
 COPY ./scripts/fork_ports_delayed.sh /root/scripts/fork_ports_delayed.sh
 COPY ./scripts/run_x11_vnc.sh /root/scripts/run_x11_vnc.sh
