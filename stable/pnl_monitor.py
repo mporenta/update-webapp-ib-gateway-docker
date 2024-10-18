@@ -11,8 +11,8 @@ logger.add("pnl_monitor.log", rotation="1 MB")
 # Configuration variables (can be set via environment variables)
 IBKR_HOST = os.environ.get('IBKR_HOST', '127.0.0.1')
 IBKR_PORT = int(os.environ.get('IBKR_PORT', '4002'))
-CLIENT_ID = int(os.environ.get('CLIENT_ID', '2')) + 2  # Ensure unique client ID
-PNL_THRESHOLD = float(os.environ.get('PNL_THRESHOLD', '-1.0'))  # Default to -1%
+CLIENT_ID = int(os.environ.get('CLIENT_ID', '1')) + 2  # Ensure unique client ID
+PNL_THRESHOLD = float(os.environ.get('PNL_THRESHOLD', '-0.05'))  # Default to -1%
 ACCOUNT = os.environ.get('ACCOUNT', '')  # If not set, will use the first account
 
 class PnLMonitor:
