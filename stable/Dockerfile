@@ -6,7 +6,7 @@
 # production image and consume unnecessary space.
 #
 
-FROM ubuntu:22.04 as setup
+FROM ubuntu:22.04 AS setup
 # Define cache buster build argument
 ARG CACHE_BUST=1
 
