@@ -89,7 +89,7 @@ async def main():
     loop = asyncio.get_event_loop()
     pnl_threshold = -1000.0  # Set your PnL threshold here
     ibapi_client = AsyncIBApi(loop, pnl_threshold)
-    ibapi_client.connect('127.0.0.1', 4002, clientId=4)
+    ibapi_client.connect('127.0.0.1', 4002, clientId=1)
 
     # Start the ibapi client in a separate thread
     ibapi_thread = Thread(target=start_ibapi_loop, args=(ibapi_client,), daemon=True)
