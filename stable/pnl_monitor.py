@@ -1,119 +1,108 @@
-#!/usr/bin/env python3
-import sys
-import os
-import time
-from ib_insync import IB, PnL, MarketOrder, util
-from loguru import logger
+import asyncio
+from ibapi.client import EClient
+from ibapi.wrapper import EWrapper
+from ibapi.contract import Contract
+from ibapi.order import Order
+from threading import Thread
 
-# Configure logging
-logger.add("pnl_monitor.log", rotation="1 MB")
+class AsyncIBApi(EWrapper, EClient):
+    def __init__(self, loop, pnl_threshold):
+        EClient.__init__(self, self)
+        self.loop = loop
+        self.pnl_threshold = pnl_threshold
+        self.current_pnl = 0.0
+        self.nextOrderId = None
+        self.positions = {}
+        self.account = ''  # Replace with your account ID if necessary
+        self.reqId = 1
 
-# Configuration variables (can be set via environment variables)
-IBKR_HOST = os.environ.get('IBKR_HOST', '127.0.0.1')
-IBKR_PORT = int(os.environ.get('IBKR_PORT', '4002'))
-CLIENT_ID = int(os.environ.get('CLIENT_ID', '1')) + 2  # Ensure unique client ID
-PNL_THRESHOLD = float(os.environ.get('PNL_THRESHOLD', '-0.05'))  # Default to -1%
-ACCOUNT = os.environ.get('ACCOUNT', '')  # If not set, will use the first account
+        # Events for asyncio synchronization
+        self.pnl_event = asyncio.Event()
+        self.positions_event = asyncio.Event()
 
-class PnLMonitor:
-    def __init__(self):
-        self.ib = IB()
-        self.loss_threshold = PNL_THRESHOLD
-        self.beginning_balance = None
-        self.account = ACCOUNT
-        self.action_taken = False
+    def error(self, reqId, errorCode, errorString):
+        print(f"Error {errorCode}: {errorString}")
 
-    def run(self):
-        try:
-            self.connect()
-            self.fetch_beginning_balance()
-            self.subscribe_to_pnl()
-            self.ib.run()  # Start the event loop
-        except Exception as e:
-            logger.exception(f"Exception in PnLMonitor: {e}")
-        finally:
-            self.ib.disconnect()
-            logger.info("Disconnected from IB.")
+    def nextValidId(self, orderId):
+        """Receives next valid order ID."""
+        self.nextOrderId = orderId
+        print(f"NextValidId: {orderId}")
 
-    def connect(self):
-        logger.info(f"Connecting to IBKR at {IBKR_HOST}:{IBKR_PORT} with client ID {CLIENT_ID}")
-        self.ib.connect(host=IBKR_HOST, port=IBKR_PORT, clientId=CLIENT_ID)
-        if not self.account:
-            self.account = self.ib.managedAccounts()[0]
-        logger.info(f"Connected to IBKR. Using account: {self.account}")
+        # Start requesting PnL and positions
+        self.reqPnL(self.reqId, self.account, '')
+        self.reqPositions()
 
-    def fetch_beginning_balance(self):
-        # Fetch account summary (blocking call on first run)
-        account_values = self.ib.accountSummary(account=self.account)
-        net_liquidation = next(
-            (float(item.value) for item in account_values
-             if item.tag == 'NetLiquidation' and item.currency == 'USD'),
-            None
-        )
-        if net_liquidation is not None:
-            self.beginning_balance = net_liquidation
-            logger.info(f"Beginning account balance: {self.beginning_balance}")
-        else:
-            logger.error("Failed to retrieve the beginning account balance.")
-            sys.exit(1)
+    def pnl(self, reqId, dailyPnL, unrealizedPnL, realizedPnL):
+        """Receives PnL updates."""
+        print(f"PnL Update - DailyPnL: {dailyPnL}, UnrealizedPnL: {unrealizedPnL}, RealizedPnL: {realizedPnL}")
+        self.current_pnl = dailyPnL
+        # Signal that new PnL data is available
+        self.loop.call_soon_threadsafe(self.pnl_event.set)
 
-    def subscribe_to_pnl(self):
-        # Subscribe to account-level PnL updates
-        self.ib.reqPnL(self.account)
-        self.ib.pnlEvent += self.on_pnl_update
-        logger.info("Subscribed to PnL updates.")
+    def position(self, account, contract, position, avgCost):
+        """Receives position updates."""
+        print(f"Position - Account: {account}, Symbol: {contract.symbol}, Position: {position}, AvgCost: {avgCost}")
+        self.positions[contract.conId] = (contract, position)
 
-    def on_pnl_update(self, pnl: PnL):
-        """
-        Event handler for PnL updates.
-        """
-        if pnl.account != self.account:
-            return  # Ignore updates for other accounts
+    def positionEnd(self):
+        """Called when all positions have been received."""
+        print("Position End")
+        # Signal that positions have been fully received
+        self.loop.call_soon_threadsafe(self.positions_event.set)
 
-        if self.action_taken:
-            return
+    def close_all_positions(self):
+        """Closes all open positions."""
+        for conId, (contract, position) in self.positions.items():
+            if position != 0:
+                order = Order()
+                order.action = 'SELL' if position > 0 else 'BUY'
+                order.orderType = 'MKT'
+                order.totalQuantity = abs(position)
+                self.placeOrder(self.nextOrderId, contract, order)
+                print(f"Placed order to close position for {contract.symbol}")
+                self.nextOrderId += 1
 
-        if self.beginning_balance is None:
-            logger.error("Beginning balance not set.")
-            return
+    def global_cancel(self):
+        """Cancels all open orders globally."""
+        print("Sending global cancel request")
+        self.reqGlobalCancel()
 
-        # Calculate percentage change
-        net_liquidation = self.beginning_balance + pnl.dailyPnL
-        percentage_change = ((net_liquidation - self.beginning_balance) / self.beginning_balance) * 100
-        logger.info(f"Current P&L: {percentage_change:.2f}%")
+def start_ibapi_loop(ibapi_client):
+    """Starts the ibapi client loop in a separate thread."""
+    ibapi_client.run()
 
-        if percentage_change <= self.loss_threshold:
-            logger.warning(f"P&L threshold reached: {percentage_change:.2f}%")
-            # Take action to close positions and cancel orders
-            self.take_action()
-            self.action_taken = True
+async def monitor_pnl(ibapi_client):
+    """Monitors PnL and triggers position closing and order cancellation."""
+    while True:
+        await ibapi_client.pnl_event.wait()
+        ibapi_client.pnl_event.clear()
+        print(f"Current PnL: {ibapi_client.current_pnl}")
+        if ibapi_client.current_pnl <= ibapi_client.pnl_threshold:
+            print("PnL threshold reached. Closing positions and cancelling orders.")
+            ibapi_client.close_all_positions()
+            ibapi_client.global_cancel()
+            break  # Exit after closing positions
+        await asyncio.sleep(1)  # Adjust the sleep interval as needed
 
-    def take_action(self):
-        """
-        Closes all positions and cancels all open orders.
-        """
-        logger.info("Closing all positions and cancelling all orders.")
-        # Close all positions
-        positions = self.ib.positions(account=self.account)
-        close_orders = []
-        for position in positions:
-            contract = position.contract
-            qty = position.position
-            action = 'SELL' if qty > 0 else 'BUY'
-            order = MarketOrder(action, abs(qty))
-            trade = self.ib.placeOrder(contract, order)
-            logger.info(f"Closing position: {action} {abs(qty)} {contract.symbol}")
-            close_orders.append(trade)
+async def main():
+    """Main asynchronous function."""
+    loop = asyncio.get_event_loop()
+    pnl_threshold = -1000.0  # Set your PnL threshold here
+    ibapi_client = AsyncIBApi(loop, pnl_threshold)
+    ibapi_client.connect('127.0.0.1', 4002, clientId=4)
 
-        # Wait for orders to be filled
-        util.waitUntil(lambda: all(trade.isDone() for trade in close_orders), timeout=60)
+    # Start the ibapi client in a separate thread
+    ibapi_thread = Thread(target=start_ibapi_loop, args=(ibapi_client,), daemon=True)
+    ibapi_thread.start()
 
-        # Cancel all open orders using reqGlobalCancel
-        self.ib.reqGlobalCancel()
-        logger.info("All open orders have been canceled.")
+    # Wait for positions to be received
+    await ibapi_client.positions_event.wait()
 
-        logger.info("All positions closed and open orders cancelled.")
+    # Start monitoring PnL
+    await monitor_pnl(ibapi_client)
 
-if __name__ == "__main__":
-    monitor = PnLMonitor()
-    monitor.run()
+    # Disconnect after operations are complete
+    ibapi_client.disconnect()
+
+if __name__ == '__main__':
+    asyncio.run(main())
