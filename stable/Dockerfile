@@ -150,6 +150,23 @@ RUN pip install -r requirements.txt
 RUN pip install -e .
 RUN chmod a+x /home/tbot/develop/github/tbot-tradingboat/tbottmux/*.sh
 
+# Add installation of official TWS API into /home/tbot/develop/github/tbot-tradingboat
+
+# Define environment variables for the TWS API version
+ENV TWS_API_VERSION=1019.04
+
+# Download and install the TWS API
+WORKDIR /home/tbot/develop/github/tbot-tradingboat
+
+# Download, extract, and prepare the TWS API
+RUN wget https://interactivebrokers.github.io/downloads/twsapi_macunix.${TWS_API_VERSION}.zip \
+  && unzip twsapi_macunix.${TWS_API_VERSION}.zip -d twsapi \
+  && rm twsapi_macunix.${TWS_API_VERSION}.zip
+
+# Ensure permissions are correct
+RUN chmod -R 755 /home/tbot/develop/github/tbot-tradingboat/twsapi
+
+
 RUN git clone -b ${TBOT_TVWB_GIT_BRANCH} ${TBOT_TVWB_GIT_REPO} /home/tbot/develop/github/tradingview-webhooks-bot
 WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
 # Install dependencies in the virtual environment
