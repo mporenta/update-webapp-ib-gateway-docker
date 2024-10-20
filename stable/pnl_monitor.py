@@ -1,3 +1,8 @@
+import sys
+import os
+
+
+from ib_insync import Contract, Order
 import asyncio
 from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
@@ -5,7 +10,7 @@ from ibapi.contract import Contract
 from ibapi.order import Order
 from threading import Thread
 
-class AsyncIBApi(EWrapper, EClient):
+class AsyncIBApi(EWrapper, EClient, Contract, Order):
     def __init__(self, loop):
         EClient.__init__(self, self)
         self.loop = loop
@@ -13,6 +18,11 @@ class AsyncIBApi(EWrapper, EClient):
         self.positions = {}
         self.account = ''  # Replace with your account ID if necessary
         self.reqId = 1
+        contract = Contract()
+        contract.secType = 'STK'
+        contract.symbol = 'SYMBOL'
+        contract.currency = 'USD'
+        contract.exchange = 'SMART'
 
         # Variables to store account values
         self.starting_equity = None
@@ -23,8 +33,11 @@ class AsyncIBApi(EWrapper, EClient):
         self.positions_event = asyncio.Event()
         self.account_value_event = asyncio.Event()
 
-    def error(self, reqId, errorCode, errorString):
-        print(f"Error {errorCode}: {errorString}")
+    # Updated error method with advancedOrderRejectJson parameter
+    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=None):
+        print(f"Error {errorCode}: {errorString} (Request ID: {reqId})")
+        if advancedOrderRejectJson:
+            print(f"Advanced Order Reject JSON: {advancedOrderRejectJson}")
 
     def nextValidId(self, orderId):
         """Receives next valid order ID."""
@@ -69,25 +82,57 @@ class AsyncIBApi(EWrapper, EClient):
         self.loop.call_soon_threadsafe(self.positions_event.set)
 
     def close_all_positions(self):
-        """Closes all open positions."""
+        """Closes all open positions using ib_insync-style order placement."""
         for conId, (contract, position) in self.positions.items():
             if position != 0:
+                # Create a new contract for each position
+                stock = Contract()
+                stock.conId = conId  # Use the existing contract ID
+                stock.symbol = contract.symbol
+                stock.secType = 'STK'
+                stock.currency = 'USD'
+                stock.exchange = contract.exchange or 'SMART'
+
+                # Create a market order to close the position
+                action = 'SELL' if position > 0 else 'BUY'
                 order = Order()
-                # Determine action to close the position
-                if position > 0:
-                    order.action = 'SELL'
-                else:
-                    order.action = 'BUY'
+                order.action = action
                 order.orderType = 'MKT'
                 order.totalQuantity = abs(position)
-                self.placeOrder(self.nextOrderId, contract, order)
-                print(f"Placed order to close position for {contract.symbol}")
+                order.account = self.account
+
+                # Log the order and contract details for debugging
+                print(f"Placing {action} order for {position} shares of {contract.symbol}")
+                print(f"Contract details: {stock.__dict__}")
+                print(f"Order details: {order.__dict__}")
+
+                # Place the order
+                self.placeOrder(self.nextOrderId, stock, order)
+                print(f"Order placed to close position for {contract.symbol}")
                 self.nextOrderId += 1
+
+
+
 
     def global_cancel(self):
         """Cancels all open orders globally."""
         print("Sending global cancel request")
         self.reqGlobalCancel()
+
+    def orderStatus(self, orderId, status, filled, remaining, avgFillPrice,
+                permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice):
+        print(f"OrderStatus. Id: {orderId}, Status: {status}, Filled: {filled}, Remaining: {remaining}")
+
+    def openOrder(self, orderId, contract, order, orderState):
+        print(f"OpenOrder. ID: {orderId}, Symbol: {contract.symbol}, Action: {order.action}, "
+          f"OrderType: {order.orderType}, Quantity: {order.totalQuantity}, Status: {orderState.status}")
+
+    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=None):
+        print(f"Error {errorCode}: {errorString} (Request ID: {reqId})")
+        if advancedOrderRejectJson:
+            print(f"Advanced Order Reject JSON: {advancedOrderRejectJson}")
+
+
 
 def start_ibapi_loop(ibapi_client):
     """Starts the ibapi client loop in a separate thread."""
@@ -112,8 +157,11 @@ async def monitor_pnl(ibapi_client):
             print("PnL loss threshold reached. Closing positions and cancelling orders.")
             ibapi_client.close_all_positions()
             ibapi_client.global_cancel()
-            break  # Exit after closing positions
+            # Do not break; continue running to process events
+            # Optionally, set a flag to prevent multiple executions
+            break  # Remove this break or add logic to keep the loop running
         await asyncio.sleep(1)  # Adjust the sleep interval as needed
+
 
 async def main():
     """Main asynchronous function."""
