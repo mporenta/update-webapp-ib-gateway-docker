@@ -1,186 +1,195 @@
-import sys
 import os
+from ib_insync import *
+import pandas as pd
+from loguru import logger
 
+PNL_THRESHOLD = float(os.environ.get('PNL_THRESHOLD', '-0.05'))  # Default to -5%
+account = os.environ.get('ACCOUNT', 'DU7397764')  # If not set, will use the first account
+beginning_balance = None
 
-from ib_insync import Contract, Order
-import asyncio
-from ibapi.client import EClient
-from ibapi.wrapper import EWrapper
-from ibapi.contract import Contract
-from ibapi.order import Order
-from threading import Thread
+class IBPortfolioMonitor:
+    def __init__(self):
+        self.ib = IB()
+        self.pnl = PnL()
+        self.account = account
+        self.portfolio_items = {}
+        self.beginning_balance = beginning_balance
+        self.total_unrealized_pnl = 0
+        self.total_realized_pnl = 0
+        self.total_market_value = 0
+        self.loss_threshold = PNL_THRESHOLD
+        self.action_taken = False  # Initialize action_taken flag
 
-class AsyncIBApi(EWrapper, EClient, Contract, Order):
-    def __init__(self, loop):
-        EClient.__init__(self, self)
-        self.loop = loop
-        self.nextOrderId = None
-        self.positions = {}
-        self.account = ''  # Replace with your account ID if necessary
-        self.reqId = 1
-        contract = Contract()
-        contract.secType = 'STK'
-        contract.symbol = 'SYMBOL'
-        contract.currency = 'USD'
-        contract.exchange = 'SMART'
+    def connect(self):
+        """Connect to IB Gateway"""
+        try:
+            self.ib.connect('127.0.0.1', 4002, clientId=1)
+            print("Successfully connected to IB Gateway")
+        except Exception as e:
+            print(f"Failed to connect: {e}")
+            raise
 
-        # Variables to store account values
-        self.starting_equity = None
-        self.current_pnl = 0.0
+    def pnl_update(self, account):
+        self.ib.pnlEvent += self.pnl_update
+        logger.info(f"PnL Update: {self.ib.pnl}")
+        return self.ib.pnl(account)
 
-        # Events for asyncio synchronization
-        self.pnl_event = asyncio.Event()
-        self.positions_event = asyncio.Event()
-        self.account_value_event = asyncio.Event()
+    def fetch_net_liquidation(self):
+        account_values = self.ib.accountSummary(self.account)
+        net_liquidation = next(
+            (float(item.value) for item in account_values
+             if item.tag == 'NetLiquidation' and item.currency == 'USD'),
+            None
+        )
+        #self.ib.pnlEvent += self.fetch_net_liquidation
+       
+        #logger.info(self.fetch_net_liquidation)
+        return net_liquidation
 
-    # Updated error method with advancedOrderRejectJson parameter
-    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=None):
-        print(f"Error {errorCode}: {errorString} (Request ID: {reqId})")
-        if advancedOrderRejectJson:
-            print(f"Advanced Order Reject JSON: {advancedOrderRejectJson}")
+    def fetch_beginning_balance(self):
+        self.beginning_balance = self.fetch_net_liquidation()
+        if self.beginning_balance is not None:
+            self.close_positions()
+            self.action_taken = True
+            logger.info(f"Beginning account balance: {self.beginning_balance}")
+        else:
+            logger.error("Failed to retrieve the beginning account balance.")
 
-    def nextValidId(self, orderId):
-        """Receives next valid order ID."""
-        self.nextOrderId = orderId
-        print(f"NextValidId: {orderId}")
+    def setup_portfolio_handlers(self):
+        """Set up portfolio update handlers"""
+        def on_portfolio_update(portfolio_item):
+            """Handle portfolio updates"""
+            symbol = portfolio_item.contract.symbol
+            self.portfolio_items[symbol] = {
+                'position': portfolio_item.position,
+                'market_price': portfolio_item.marketPrice,
+                'market_value': portfolio_item.marketValue,
+                'average_cost': portfolio_item.averageCost,
+                'unrealized_pnl': portfolio_item.unrealizedPNL,
+                'realized_pnl': portfolio_item.realizedPNL
+            }
+            
+            # Update totals
+            self.update_portfolio_totals()
+            
+            # Print position details
+            self.print_position_details(portfolio_item)
 
-        # Request account summary to get starting equity
-        self.reqAccountSummary(self.reqId, "All", "NetLiquidation")
+        # Subscribe to portfolio updates
+        self.ib.updatePortfolioEvent += on_portfolio_update
 
-    def accountSummary(self, reqId, account, tag, value, currency):
-        """Receives account summary updates."""
-        if tag == "NetLiquidation":
-            print(f"Account Summary - NetLiquidation: {value} {currency}")
-            self.starting_equity = float(value)
-            self.account = account  # Store the account ID if not set
-            # Once starting equity is obtained, start requesting PnL and positions
-            self.reqPnL(self.reqId, self.account, '')
-            self.reqPositions()
-            # Signal that account value is received
-            self.loop.call_soon_threadsafe(self.account_value_event.set)
+    def on_pnl_update(self):
+        if self.beginning_balance is None:
+            self.fetch_beginning_balance()
+        current_net_liquidation = self.fetch_net_liquidation()
+        if current_net_liquidation is not None and self.beginning_balance is not None:
+            # Calculate percentage change
+            percentage_change = ((current_net_liquidation - self.beginning_balance) / self.beginning_balance) * 100
+            logger.info(f"Current P&L: {percentage_change:.2f}%")
+            if percentage_change <= self.loss_threshold:
+                logger.warning(f"P&L threshold reached: {percentage_change:.2f}%")
+                # Take action to close positions and cancel orders
+                self.close_positions()
+                self.action_taken = True
+        else:
+            logger.error("Failed to retrieve current net liquidation value.")
 
-    def accountSummaryEnd(self, reqId):
-        """Called when account summary request is complete."""
-        print("Account Summary End")
+    def close_positions(self):
+        positions = self.ib.positions()
+        for position in positions:
+            contract = position.contract
+            pos_size = position.position
+            if pos_size == 0:
+                continue  # Nothing to close
+            action = 'SELL' if pos_size > 0 else 'BUY'
+            order = Order(
+                action=action,
+                totalQuantity=abs(pos_size),
+                orderType='MKT'
+            )
+            trade = self.ib.placeOrder(contract, order)
+            
+            print(f"Placed order to {action} {abs(pos_size)} of {contract.symbol}")
 
-    def pnl(self, reqId, dailyPnL, unrealizedPnL, realizedPnL):
-        """Receives PnL updates."""
-        print(f"PnL Update - DailyPnL: {dailyPnL}, UnrealizedPnL: {unrealizedPnL}, RealizedPnL: {realizedPnL}")
-        self.current_pnl = dailyPnL
-        # Signal that new PnL data is available
-        self.loop.call_soon_threadsafe(self.pnl_event.set)
+    def get_positions(self):
+        """Get current positions"""
+        my_positions = self.ib.positions()
+        print("My positions:")
+        print(my_positions)
+        return my_positions
 
-    def position(self, account, contract, position, avgCost):
-        """Receives position updates."""
-        print(f"Position - Account: {account}, Symbol: {contract.symbol}, Position: {position}, AvgCost: {avgCost}")
-        self.positions[contract.conId] = (contract, position)
+    def get_positions_event(self):
+        """Get positions event"""
+        self.ib.positionEvent += self.get_positions
 
-    def positionEnd(self):
-        """Called when all positions have been received."""
-        print("Position End")
-        # Signal that positions have been fully received
-        self.loop.call_soon_threadsafe(self.positions_event.set)
+    def update_portfolio_totals(self):
+        """Update portfolio totals"""
+        self.total_unrealized_pnl = sum(item['unrealized_pnl'] for item in self.portfolio_items.values())
+        self.total_realized_pnl = sum(item['realized_pnl'] for item in self.portfolio_items.values())
+        self.total_market_value = sum(item['market_value'] for item in self.portfolio_items.values())
 
-    def close_all_positions(self):
-        """Closes all open positions using ib_insync-style order placement."""
-        for conId, (contract, position) in self.positions.items():
-            if position != 0:
-                # Create a new contract for each position
-                stock = Contract()
-                stock.conId = conId  # Use the existing contract ID
-                stock.symbol = contract.symbol
-                stock.secType = 'STK'
-                stock.currency = 'USD'
-                stock.exchange = contract.exchange or 'SMART'
+        print("\nPortfolio Totals:")
+        print(f"Total Market Value: ${self.total_market_value:,.2f}")
+        print(f"Total Unrealized P&L: ${self.total_unrealized_pnl:,.2f}")
+        print(f"Total Realized P&L: ${self.total_realized_pnl:,.2f}")
+        print(f"Total P&L: ${(self.total_unrealized_pnl + self.total_realized_pnl):,.2f}")
 
-                # Create a market order to close the position
-                action = 'SELL' if position > 0 else 'BUY'
-                order = Order()
-                order.action = action
-                order.orderType = 'MKT'
-                order.totalQuantity = abs(position)
-                order.account = self.account
+    def print_position_details(self, portfolio_item):
+        """Print detailed position information"""
+        print(f"\nPosition Update for {portfolio_item.contract.symbol}:")
+        print(f"Position: {portfolio_item.position:,.0f} shares")
+        print(f"Market Price: ${portfolio_item.marketPrice:,.2f}")
+        print(f"Market Value: ${portfolio_item.marketValue:,.2f}")
+        print(f"Average Cost: ${portfolio_item.averageCost:,.2f}")
+        print(f"Unrealized P&L: ${portfolio_item.unrealizedPNL:,.2f}")
+        print(f"Realized P&L: ${portfolio_item.realizedPNL:,.2f}")
+        
+        # Calculate and print additional metrics
+        if portfolio_item.position != 0:
+            pnl_percentage = (portfolio_item.unrealizedPNL / 
+                              (portfolio_item.averageCost * abs(portfolio_item.position))) * 100
+            print(f"P&L %: {pnl_percentage:.2f}%")
 
-                # Log the order and contract details for debugging
-                print(f"Placing {action} order for {position} shares of {contract.symbol}")
-                print(f"Contract details: {stock.__dict__}")
-                print(f"Order details: {order.__dict__}")
+    def get_portfolio_summary_df(self):
+        """Create a pandas DataFrame with portfolio summary"""
+        df = pd.DataFrame.from_dict(self.portfolio_items, orient='index')
+        df['pnl_percentage'] = (df['unrealized_pnl'] / 
+                               (df['average_cost'] * abs(df['position']))) * 100
+        return df
 
-                # Place the order
-                self.placeOrder(self.nextOrderId, stock, order)
-                print(f"Order placed to close position for {contract.symbol}")
-                self.nextOrderId += 1
+    def run(self):
+        """Main run method"""
+        try:
+            self.connect()
+            # Request initial portfolio data
+            portfolio = self.ib.portfolio()
+            positions = self.ib.positions()
+            PnL()
+           
 
+            self.setup_portfolio_handlers()
+            self.on_pnl_update()
+            self.get_positions_event()
+            self.get_positions()
+            self.pnl_update(account)
+            currentPnL= self.pnl_update(account)
+            print("Current Positions:")
+            print(positions)
+            print("Current PnL Updates:")
+            print(currentPnL)
+            
+            
+            # Keep the connection alive
+            self.ib.run()
+            
+        except KeyboardInterrupt:
+            print("\nShutting down...")
+        except Exception as e:
+            print(f"Error in main loop: {e}")
+        finally:
+            self.ib.disconnect()
 
+if __name__ == "__main__":
+    monitor = IBPortfolioMonitor()
+    monitor.run()
 
-
-    def global_cancel(self):
-        """Cancels all open orders globally."""
-        print("Sending global cancel request")
-        self.reqGlobalCancel()
-
-    def orderStatus(self, orderId, status, filled, remaining, avgFillPrice,
-                permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice):
-        print(f"OrderStatus. Id: {orderId}, Status: {status}, Filled: {filled}, Remaining: {remaining}")
-
-    def openOrder(self, orderId, contract, order, orderState):
-        print(f"OpenOrder. ID: {orderId}, Symbol: {contract.symbol}, Action: {order.action}, "
-          f"OrderType: {order.orderType}, Quantity: {order.totalQuantity}, Status: {orderState.status}")
-
-    def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=None):
-        print(f"Error {errorCode}: {errorString} (Request ID: {reqId})")
-        if advancedOrderRejectJson:
-            print(f"Advanced Order Reject JSON: {advancedOrderRejectJson}")
-
-
-
-def start_ibapi_loop(ibapi_client):
-    """Starts the ibapi client loop in a separate thread."""
-    ibapi_client.run()
-
-async def monitor_pnl(ibapi_client):
-    """Monitors PnL and triggers position closing and order cancellation."""
-    # Wait until starting equity is available
-    await ibapi_client.account_value_event.wait()
-    print(f"Starting Equity: {ibapi_client.starting_equity}")
-
-    pnl_threshold_percent = 1.0  # Set the PnL loss percentage threshold (1%)
-
-    while True:
-        await ibapi_client.pnl_event.wait()
-        ibapi_client.pnl_event.clear()
-        # Calculate PnL loss percentage
-        pnl_loss_percent = (-ibapi_client.current_pnl / ibapi_client.starting_equity) * 100
-        print(f"Current PnL Loss Percentage: {pnl_loss_percent:.2f}%")
-
-        if pnl_loss_percent >= pnl_threshold_percent:
-            print("PnL loss threshold reached. Closing positions and cancelling orders.")
-            ibapi_client.close_all_positions()
-            ibapi_client.global_cancel()
-            # Do not break; continue running to process events
-            # Optionally, set a flag to prevent multiple executions
-            break  # Remove this break or add logic to keep the loop running
-        await asyncio.sleep(1)  # Adjust the sleep interval as needed
-
-
-async def main():
-    """Main asynchronous function."""
-    loop = asyncio.get_event_loop()
-    ibapi_client = AsyncIBApi(loop)
-    ibapi_client.connect('127.0.0.1', 4002, clientId=7)
-
-    # Start the ibapi client in a separate thread
-    ibapi_thread = Thread(target=start_ibapi_loop, args=(ibapi_client,), daemon=True)
-    ibapi_thread.start()
-
-    # Wait for positions to be received
-    await ibapi_client.positions_event.wait()
-
-    # Start monitoring PnL
-    await monitor_pnl(ibapi_client)
-
-    # Disconnect after operations are complete
-    ibapi_client.disconnect()
-
-if __name__ == '__main__':
-    asyncio.run(main())
