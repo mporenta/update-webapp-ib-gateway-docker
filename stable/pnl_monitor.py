@@ -23,7 +23,7 @@ class IBPortfolioMonitor:
     def connect(self):
         """Connect to IB Gateway"""
         try:
-            self.ib.connect('127.0.0.1', 4002, clientId=1)
+            self.ib.connect('127.0.0.1', 4002, clientId=7)
             print("Successfully connected to IB Gateway")
         except Exception as e:
             print(f"Failed to connect: {e}")
