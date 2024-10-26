@@ -153,7 +153,7 @@ if __name__ == "__main__":
     app = TradingApp()
     
     try:
-        app.connect("127.0.0.1", 7497, clientId=1)
+        app.connect("127.0.0.1", 4002, clientId=7)
         
         # Start websocket connection
         con_thread = threading.Thread(target=websocket_con, daemon=True)
