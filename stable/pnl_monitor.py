@@ -202,4 +202,8 @@ if __name__ == "__main__":
             
             logger.info("Cleanup completed successfully")
         except Exception as e:
+<<<<<<< HEAD
             logger.error(f"Error during cleanup: {str(e)}", exc_info=True)
+=======
+            logger.error(f"Error during cleanup: {str(e)}", exc_info=True)
+>>>>>>> 3b2e5cb822f6cf3151ad95d937564d8902c463a4
