@@ -1,13 +1,15 @@
-import os
-from ib_insync import *
+from ibapi.client import EClient
+from ibapi.wrapper import EWrapper
+from ibapi.contract import Contract
+from ibapi.order import Order
+import threading
+import time
 import pandas as pd
-from loguru import logger
+from threading import Event
+from datetime import datetime
+import logging
 
-PNL_THRESHOLD = float(os.environ.get('PNL_THRESHOLD', '-0.05'))  # Default to -5%
-account = os.environ.get('ACCOUNT', 'DU0000000')  # If not set, will use the first account
-beginning_balance = None
-
-class IBPortfolioMonitor:
+class TradingApp(EWrapper, EClient):
     def __init__(self):
         EClient.__init__(self,self)
         self.pos_df = pd.DataFrame(columns=['Account', 'Symbol', 'SecType',
@@ -61,102 +63,143 @@ class IBPortfolioMonitor:
                 # Trigger trade_positions in a separate thread
                 threading.Thread(target=trade_positions, args=(self,)).start()
 
-    def close_positions(self):
-        positions = self.ib.positions()
-        for position in positions:
-            contract = position.contract
-            pos_size = position.position
-            if pos_size == 0:
-                continue  # Nothing to close
-            action = 'SELL' if pos_size > 0 else 'BUY'
-            order = Order(
-                action=action,
-                totalQuantity=abs(pos_size),
-                orderType='MKT'
-            )
-            trade = self.ib.placeOrder(contract, order)
-            
-            print(f"Placed order to {action} {abs(pos_size)} of {contract.symbol}")
+    def updateAccountValue(self, key: str, val: str, currency: str, accountName: str):
+        """Called when account values update"""
+        if key == "NetLiquidation" and currency == "USD" and self.starting_net_liq is None:
+            self.starting_net_liq = float(val)
+            print(f"Starting Net Liquidation Value: ${self.starting_net_liq:.2f}")
 
-    def get_positions(self):
-        """Get current positions"""
-        my_positions = self.ib.positions()
-        print("My positions:")
-        print(my_positions)
-        return my_positions
+    def error(self, reqId: int, errorCode: int, errorString: str, advancedOrderRejectJson=""):
+        """Handle errors"""
+        print(f"Error {errorCode}: {errorString}")
+        if errorCode == 1100:  # Connectivity between IB and TWS has been lost
+            print("Connection lost to TWS")
+        elif errorCode == 1102:  # Connectivity between IB and TWS has been restored
+            print("Connection restored to TWS")
+        elif errorCode == 506:   # Requested market data is not subscribed
+            print("Market data subscription error")
 
-    def get_positions_event(self):
-        """Get positions event"""
-        self.ib.positionEvent += self.get_positions
+    def connectionClosed(self):
+        """Called when connection is closed"""
+        print("Connection closed")
+        self.exit_event.set()
 
-    def update_portfolio_totals(self):
-        """Update portfolio totals"""
-        self.total_unrealized_pnl = sum(item['unrealized_pnl'] for item in self.portfolio_items.values())
-        self.total_realized_pnl = sum(item['realized_pnl'] for item in self.portfolio_items.values())
-        self.total_market_value = sum(item['market_value'] for item in self.portfolio_items.values())
+def websocket_con():
+    app.run()
+    
+def usStk(symbol, sectype="STK", currency="USD", exchange="NASDAQ"):
+    contract = Contract()
+    contract.symbol = symbol
+    contract.secType = sectype
+    contract.currency = currency
+    contract.exchange = exchange
+    return contract
 
-        print("\nPortfolio Totals:")
-        print(f"Total Market Value: ${self.total_market_value:,.2f}")
-        print(f"Total Unrealized P&L: ${self.total_unrealized_pnl:,.2f}")
-        print(f"Total Realized P&L: ${self.total_realized_pnl:,.2f}")
-        print(f"Total P&L: ${(self.total_unrealized_pnl + self.total_realized_pnl):,.2f}")
+def mktOrder(direction, quantity):
+    order = Order()
+    order.action = direction
+    order.orderType = "MKT"
+    order.totalQuantity = quantity
+    order.eTradeOnly = ""
+    order.firmQuoteOnly = ""
+    return order
 
-    def print_position_details(self, portfolio_item):
-        """Print detailed position information"""
-        print(f"\nPosition Update for {portfolio_item.contract.symbol}:")
-        print(f"Position: {portfolio_item.position:,.0f} shares")
-        print(f"Market Price: ${portfolio_item.marketPrice:,.2f}")
-        print(f"Market Value: ${portfolio_item.marketValue:,.2f}")
-        print(f"Average Cost: ${portfolio_item.averageCost:,.2f}")
-        print(f"Unrealized P&L: ${portfolio_item.unrealizedPNL:,.2f}")
-        print(f"Realized P&L: ${portfolio_item.realizedPNL:,.2f}")
+def trade_positions(app_instance):
+    """Close all positions"""
+    app_instance.position_updates_received = False
+    app_instance.reqPositions()
+    
+    # Wait until positions are received
+    timeout = 10  # seconds
+    start_time = time.time()
+    while not app_instance.position_updates_received:
+        time.sleep(0.1)
+        if time.time() - start_time > timeout:
+            print("Timeout waiting for positions")
+            return
+    
+    # Process each position
+    for index, row in app_instance.pos_df.iterrows():
+        position = float(row['Position'])
+        symbol = row['Symbol']
         
-        # Calculate and print additional metrics
-        if portfolio_item.position != 0:
-            pnl_percentage = (portfolio_item.unrealizedPNL / 
-                              (portfolio_item.averageCost * abs(portfolio_item.position))) * 100
-            print(f"P&L %: {pnl_percentage:.2f}%")
-
-    def get_portfolio_summary_df(self):
-        """Create a pandas DataFrame with portfolio summary"""
-        df = pd.DataFrame.from_dict(self.portfolio_items, orient='index')
-        df['pnl_percentage'] = (df['unrealized_pnl'] / 
-                               (df['average_cost'] * abs(df['position']))) * 100
-        return df
-
-    def run(self):
-        """Main run method"""
-        try:
-            self.connect()
-            # Request initial portfolio data
-            portfolio = self.ib.portfolio()
-            positions = self.ib.positions()
-            PnL()
-           
-
-            self.setup_portfolio_handlers()
-            self.on_pnl_update()
-            self.get_positions_event()
-            self.get_positions()
-            self.pnl_update(account)
-            currentPnL= self.pnl_update(account)
-            print("Current Positions:")
-            print(positions)
-            print("Current PnL Updates:")
-            print(currentPnL)
+        if position != 0:  # Only process non-zero positions
+            # Determine order direction and quantity
+            if position > 0:  # Long position
+                direction = "SELL"
+                quantity = abs(position)
+                print(f"Closing long position in {symbol}: {quantity} shares")
+            else:  # Short position
+                direction = "BUY"
+                quantity = abs(position)
+                print(f"Covering short position in {symbol}: {quantity} shares")
             
-            
-            # Keep the connection alive
-            self.ib.run()
-            
-        except KeyboardInterrupt:
-            print("\nShutting down...")
-        except Exception as e:
-            print(f"Error in main loop: {e}")
-        finally:
-            self.ib.disconnect()
+            # Place the order
+            app_instance.placeOrder(
+                app_instance.nextValidOrderId,
+                usStk(symbol),
+                mktOrder(direction, quantity)
+            )
+            app_instance.nextValidOrderId += 1
+            time.sleep(1)  # Add delay between orders
+    
+    # After closing positions, trigger exit
+    app_instance.exit_event.set()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(f'ibkr_connection_{datetime.now().strftime("%Y%m%d")}.log'),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger('IBKR_Connection')
 
 if __name__ == "__main__":
-    monitor = IBPortfolioMonitor()
-    monitor.run()
+    app = TradingApp()
+    
+    try:
+        logger.info("Attempting to connect to IB Gateway at 127.0.0.1:4002")
+        app.connect("127.0.0.1", 4002, clientId=7)
+        
+        # Start websocket connection
+        logger.info("Starting websocket connection thread")
+        con_thread = threading.Thread(target=websocket_con, daemon=True)
+        con_thread.start()
+        
+        logger.info("Waiting for connection to establish...")
+        time.sleep(1)  # Allow time for connection to establish
+        
+        if app.isConnected():
+            logger.info("Successfully connected to IB Gateway")
+        else:
+            logger.error("Failed to establish connection to IB Gateway")
+            raise ConnectionError("Could not connect to IB Gateway")
 
+        # Request account updates
+        account_id = 'DU7397764'  # Replace with your account number
+        logger.info(f"Requesting account updates for account {account_id}")
+        app.reqAccountUpdates(True, account_id)
+        
+        # Wait for exit event instead of polling
+        logger.info("Waiting for exit event...")
+        app.exit_event.wait()
+        
+    except KeyboardInterrupt:
+        logger.warning("Received keyboard interrupt, initiating shutdown...")
+    except Exception as e:
+        logger.error(f"An error occurred: {str(e)}", exc_info=True)
+    finally:
+        logger.info("Starting cleanup process...")
+        try:
+            logger.info(f"Stopping account updates for account {account_id}")
+            app.reqAccountUpdates(False, account_id)
+            
+            logger.info("Disconnecting from IB Gateway")
+            app.disconnect()
+            
+            logger.info("Cleanup completed successfully")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {str(e)}", exc_info=True)
