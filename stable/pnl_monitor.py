@@ -179,7 +179,7 @@ if __name__ == "__main__":
             raise ConnectionError("Could not connect to IB Gateway")
 
         # Request account updates
-        account_id = 'DU7397764'  # Replace with your account number
+        account_id = 'DU0000000'  # Replace with your account number
         logger.info(f"Requesting account updates for account {account_id}")
         app.reqAccountUpdates(True, account_id)
         
