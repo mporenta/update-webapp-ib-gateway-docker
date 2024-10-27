@@ -4,7 +4,7 @@ import pandas as pd
 from loguru import logger
 
 PNL_THRESHOLD = float(os.environ.get('PNL_THRESHOLD', '-0.05'))  # Default to -5%
-account = os.environ.get('ACCOUNT', 'DU7397764')  # If not set, will use the first account
+account = os.environ.get('ACCOUNT', 'DU0000000')  # If not set, will use the first account
 beginning_balance = None
 
 class IBPortfolioMonitor:
