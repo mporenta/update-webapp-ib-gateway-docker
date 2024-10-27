@@ -1,5 +1,6 @@
-TWS_USERID=myTwsAccountName
-TWS_PASSWORD=myTwsPassword
+TWS_USERID=none
+TWS_PASSWORD=none
+TRADING_MODE=paper
 TRADING_MODE=paper
 READ_ONLY_API=no
 VNC_SERVER_PASSWORD=myVncPassword

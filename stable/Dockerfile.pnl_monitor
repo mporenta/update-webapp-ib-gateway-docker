@@ -1,0 +1,66 @@
+#
+# Setup Stage: install apps
+#
+# This is a dedicated stage so that download archives don't end up on 
+# production image and consume unnecessary space.
+#
+
+FROM ubuntu:22.04 AS setup
+
+# Prepare system
+RUN apt-get update -y
+RUN apt-get install --no-install-recommends --yes \
+    curl \
+    ca-certificates \
+    unzip
+
+RUN apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
+
+RUN apt-get install --no-install-recommends --yes \
+    gettext \
+    xvfb \
+    libxslt-dev \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    libgtk2.0-bin \
+    socat \
+    x11vnc \
+    git \
+    redis-server \
+    wget \
+    unzip \
+    tmux \
+    openssh-client \
+    net-tools \
+    vim \
+    dos2unix
+
+RUN apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa
+
+# Install Python 3.9 and set it as the default
+RUN apt-get install -y python3.9 python3.9-venv python3.9-dev python3.9-distutils python3-pip && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+
+# Install netcat for the wait-for-ib.sh script
+RUN apt-get update && apt-get install -y netcat
+
+# Create a non-root user and set its home directory
+RUN useradd -m tbot
+
+# Set the working directory to the user's home directory
+WORKDIR /home/tbot
+
+# Copy your pnl_monitor.py script and requirements.txt into the container
+COPY pnl_monitor.py /home/tbot
+COPY pnl_dev.py /home/tbot
+COPY run-python.sh /home/tbot
+COPY requirements.txt /home/tbot
+
+# Install Python dependencies
+RUN pip install -r requirements.txt
+
+
+RUN chmod +x /home/tbot/run-python.sh
+CMD ["./run-python.sh"]
