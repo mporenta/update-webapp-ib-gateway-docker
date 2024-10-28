@@ -6,8 +6,6 @@ import threading
 import time
 import pandas as pd
 from threading import Event
-from datetime import datetime
-import logging
 
 class TradingApp(EWrapper, EClient):
     def __init__(self):
@@ -40,6 +38,11 @@ class TradingApp(EWrapper, EClient):
         super().positionEnd()
         self.position_updates_received = True
         print("All positions received")
+        
+    def pnl(self, reqId: int, dailyPnL: float, unrealizedPnL: float, realizedPnL: float):
+        """returns the daily PnL for the account"""
+        self.current_dailypnl_pnl = dailyPnL
+
 
     def updatePortfolio(self, contract: Contract, position: float, marketPrice: float, marketValue: float,
                         averageCost: float, unrealizedPNL: float, realizedPNL: float, accountName: str):
@@ -49,11 +52,16 @@ class TradingApp(EWrapper, EClient):
         
         # Calculate total P&L
         total_pnl = unrealizedPNL + realizedPNL
-        
+        print(f"Realized P&L: ${realizedPNL:.2f}")
+        print(f"Unrealized P&L: ${unrealizedPNL:.2f}")
+
+        print(f"Total P&L: ${total_pnl:.2f}")
+
+        # 
         # Check if we have starting net liquidation value
         if self.starting_net_liq is not None and not self.stop_loss_triggered:
-            loss_threshold = -0.01 * self.starting_net_liq  # -1% of starting value
-            
+            #loss_threshold = 1 
+            loss_threshold = -0.01 * self.starting_net_liq
             if total_pnl <= loss_threshold:
                 print(f"\nStop loss triggered!")
                 print(f"Total P&L: ${total_pnl:.2f}")
@@ -119,7 +127,7 @@ def trade_positions(app_instance):
             return
     
     # Process each position
-    for index, row in app_instance.pos_df.iterrows():
+    for _, row in app_instance.pos_df.iterrows():
         position = float(row['Position'])
         symbol = row['Symbol']
         
@@ -135,75 +143,41 @@ def trade_positions(app_instance):
                 print(f"Covering short position in {symbol}: {quantity} shares")
             
             # Place the order
-            app_instance.placeOrder(
-                app_instance.nextValidOrderId,
-                usStk(symbol),
-                mktOrder(direction, quantity)
-            )
+            contract = Contract()
+            contract.symbol = symbol
+            contract.secType = "STK"
+            contract.currency = "USD"
+            contract.exchange = "SMART"
+            order = mktOrder(direction, quantity)
+            app_instance.placeOrder(app_instance.nextValidOrderId, contract, order)
             app_instance.nextValidOrderId += 1
             time.sleep(1)  # Add delay between orders
     
     # After closing positions, trigger exit
     app_instance.exit_event.set()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(f'ibkr_connection_{datetime.now().strftime("%Y%m%d")}.log'),
-        logging.StreamHandler()
-    ]
-)
-
-logger = logging.getLogger('IBKR_Connection')
-
 if __name__ == "__main__":
     app = TradingApp()
     
     try:
-        logger.info("Attempting to connect to IB Gateway at 127.0.0.1:4002")
         app.connect("127.0.0.1", 4002, clientId=7)
         
         # Start websocket connection
-        logger.info("Starting websocket connection thread")
         con_thread = threading.Thread(target=websocket_con, daemon=True)
         con_thread.start()
-        
-        logger.info("Waiting for connection to establish...")
         time.sleep(1)  # Allow time for connection to establish
-        
-        if app.isConnected():
-            logger.info("Successfully connected to IB Gateway")
-        else:
-            logger.error("Failed to establish connection to IB Gateway")
-            raise ConnectionError("Could not connect to IB Gateway")
 
-        # Request account updates
-        account_id = 'DU0000000'  # Replace with your account number
-        logger.info(f"Requesting account updates for account {account_id}")
-        app.reqAccountUpdates(True, account_id)
+        # Request account updates - this will trigger updatePortfolio events
+        app.reqAccountUpdates(True, 'DU7397764')  # Replace with your account number
+
         
         # Wait for exit event instead of polling
-        logger.info("Waiting for exit event...")
         app.exit_event.wait()
         
     except KeyboardInterrupt:
-        logger.warning("Received keyboard interrupt, initiating shutdown...")
-    except Exception as e:
-        logger.error(f"An error occurred: {str(e)}", exc_info=True)
+        print("\nExiting on user interrupt...")
     finally:
-        logger.info("Starting cleanup process...")
-        try:
-            logger.info(f"Stopping account updates for account {account_id}")
-            app.reqAccountUpdates(False, account_id)
-            
-            logger.info("Disconnecting from IB Gateway")
-            app.disconnect()
-            
-            logger.info("Cleanup completed successfully")
-        except Exception as e:
-<<<<<<< HEAD
-            logger.error(f"Error during cleanup: {str(e)}", exc_info=True)
-=======
-            logger.error(f"Error during cleanup: {str(e)}", exc_info=True)
->>>>>>> 3b2e5cb822f6cf3151ad95d937564d8902c463a4
+        print("Cleaning up...")
+        app.reqAccountUpdates(False, 'DU7397764')  # Stop account updates
+        app.disconnect()
+        print("Disconnected")
