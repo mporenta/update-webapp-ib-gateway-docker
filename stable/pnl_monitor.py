@@ -61,7 +61,7 @@ class TradingApp(EWrapper, EClient):
         # Check if we have starting net liquidation value
         if self.starting_net_liq is not None and not self.stop_loss_triggered:
             #loss_threshold = 1 
-            loss_threshold = -0.01 * self.starting_net_liq
+            loss_threshold = -300.00
             if total_pnl <= loss_threshold:
                 print(f"\nStop loss triggered!")
                 print(f"Total P&L: ${total_pnl:.2f}")
