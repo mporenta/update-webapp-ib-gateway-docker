@@ -1,5 +1,5 @@
 import logging
-from ib_insync import IB, MarketOrder, LimitOrder, PnL, PortfolioItem, Watchdog
+from ib_async import IB, MarketOrder, LimitOrder, PnL, PortfolioItem, Watchdog
 from typing import List, Dict, Optional
 from datetime import datetime
 import time
