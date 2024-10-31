@@ -27,7 +27,7 @@ class IBPortfolioTracker:
         
         # Connect to IB Gateway
         try:
-            self.ib.connect("127.0.0.1", 7497, clientId=7)
+            self.ib.connect("127.0.0.1", 4002, clientId=7)
             self.logger.info("Connected successfully to IB Gateway")
             
             # Get account
