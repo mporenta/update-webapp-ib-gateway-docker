@@ -5,12 +5,12 @@ from datetime import datetime
 import time
 import pytz
 
-RISK_PERCENT = 0.015  # 1.5% risk threshold       
+RISK_PERCENT = 0.0039  # 1.5% risk threshold       
 
 class IBPortfolioTracker:
     def __init__(self):
         self.ib = IB()
-        self.accountV = {}
+        self.account = "DU7397764"
         self.total_realized_pnl = 0.0
         self.total_unrealized_pnl = 0.0
         self.daily_pnl = 0.0
@@ -27,7 +27,7 @@ class IBPortfolioTracker:
         
         # Connect to IB Gateway
         try:
-            self.ib.connect("127.0.0.1", 4002, clientId=7)
+            self.ib.connect("127.0.0.1", 4002, clientId=8)
             self.logger.info("Connected successfully to IB Gateway")
             
             # Wait for managed accounts to be populated
@@ -98,17 +98,18 @@ class IBPortfolioTracker:
             self.ib.sleep(1)  # Give time for update to arrive
         return self.net_liquidation
 
-    def check_pnl_conditions(self) -> bool:
+    def check_pnl_conditions(self,  pnl: PnL) -> bool:
         """Check if PnL has exceeded risk threshold"""
         try:
             net_liq = self.get_net_liquidation()
             if net_liq <= 0:
                 self.logger.warning(f"Invalid net liquidation value: ${net_liq:,.2f}")
                 return False
-                
+            
+            self.daily_pnl = float(pnl.dailyPnL) if pnl.dailyPnL is not None else 0.0
             self.risk_amount = net_liq * RISK_PERCENT
-            #is_threshold_exceeded = self.daily_pnl <= -self.risk_amount  # Note the negative sign
-            is_threshold_exceeded = 100 <= self.risk_amount  # Note the negative sign
+            is_threshold_exceeded = self.daily_pnl <= -self.risk_amount  # Note the negative sign
+            #is_threshold_exceeded = 100 <= self.risk_amount  # Note the negative sign
             self.logger.info(f"Risk amount is ${self.risk_amount:,.2f} ")
             
             if is_threshold_exceeded:
@@ -121,6 +122,84 @@ class IBPortfolioTracker:
         except Exception as e:
             self.logger.error(f"Error checking PnL conditions: {str(e)}")
             return False
+    def close_all_positions(self):
+        """Close all positions with market or limit orders based on time"""
+        trades = []
+        try:
+            positions = [pos for pos in self.ib.positions() if pos.position != 0]
+            
+            if not positions:
+                self.logger.info("No positions to close")
+                return trades
+                
+            # Get current NY time
+            ny_tz = pytz.timezone('America/New_York')
+            ny_time = datetime.now(ny_tz)
+            current_hour = ny_time.hour
+            
+            # Determine if we're in after-hours (16:00-20:00 NY time)
+            is_after_hours = 16 <= current_hour < 23
+            
+            self.logger.info(f"""
+    Attempting to close {len(positions)} positions
+    Time: {ny_time.strftime('%H:%M:%S')} NY
+    Order Type: {'LIMIT' if is_after_hours else 'MARKET'}
+    """)
+            
+            # Get existing trades
+            existing_trades = self.ib.trades()
+            all_positions_have_orders = True  # Flag to track if all positions have orders
+            
+            for position in positions:
+                # Check if we already have a pending order for this contract
+                has_pending_order = any(
+                    trade.contract.conId == position.contract.conId and 
+                    trade.orderStatus.status not in ['Filled', 'Cancelled', 'Inactive']
+                    for trade in existing_trades
+                )
+                
+                if has_pending_order:
+                    self.logger.info(f"Already have pending order for {position.contract.symbol}, skipping...")
+                    continue
+                
+                # If we get here, at least one position doesn't have an order
+                all_positions_have_orders = False
+                
+                # Rest of your existing order placement code...
+                action = 'SELL' if position.position > 0 else 'BUY'
+                quantity = abs(position.position)
+                
+             
+                self.ib.sleep(1)
+                
+                
+                order = MarketOrder(
+                    action=action,
+                    totalQuantity=quantity,
+                    account=self.account,
+                    tif='GTC'
+                )
+                order_type = "Market"
+            
+            # Your existing logging and order placement...
+            trade = self.ib.placeOrder(position.contract, order)
+            trades.append(trade)
+                    
+            # Check if all positions have pending orders
+            if all_positions_have_orders:
+                self.logger.info(f"""
+    All {len(positions)} positions have pending orders.
+    Waiting 30 seconds before resuming normal operations...
+    """)
+                self.ib.sleep(30)
+                return trades
+                
+            return trades
+                
+        except Exception as e:
+            self.logger.error(f"Error closing positions: {str(e)}")
+            return trades
+
 
     def on_pnl_update(self, pnl: PnL):
         """Handle PnL updates from IB"""
@@ -139,7 +218,7 @@ PnL Update:
 """)
             
             # Check PnL conditions and get positions if needed
-            if self.check_pnl_conditions():
+            if self.check_pnl_conditions(self.pnl):
                 positions = [pos for pos in self.ib.positions() if pos.position != 0]
                 existing_trades = self.ib.trades()
                 
@@ -168,21 +247,30 @@ PnL Update:
 
     def run(self):
         """Start the event loop"""
+        trades = []
         try:
             self.logger.info("Starting IB event loop...")
-            
+           
             while True:
                 self.ib.sleep(1)
                 if self.should_close_positions:
-                    # Here you would implement your position closing logic
-                    self.logger.info("Should close positions flag is set")
+                    self.logger.info("Initiating position closing...")
+                    trades = self.close_all_positions()
                     self.should_close_positions = False  # Reset flag
-                    
+                    #positions = [pos for pos in self.ib.positions() if pos.position != 0]
+            
+                
+                   
+                    self.ib.sleep(1)
+                   
+                                                                    
         except KeyboardInterrupt:
             self.logger.info("Shutting down...")
-        finally:
-            self.ib.disconnect()
+        #finally:
+            #self.ib.disconnect()
 
 if __name__ == "__main__":
     portfolio_tracker = IBPortfolioTracker()
     portfolio_tracker.run()
+
+   
