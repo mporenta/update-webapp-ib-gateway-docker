@@ -114,14 +114,14 @@ class IBPortfolioTracker:
                 return False
             
             self.daily_pnl = float(pnl.dailyPnL) if pnl.dailyPnL is not None else 0.0
-            self.risk_amount = net_liq * RISK_PERCENT
+            self.risk_amount = net_liq * self.risk_percent
             is_threshold_exceeded = self.daily_pnl <= -self.risk_amount  # Note the negative sign
             #is_threshold_exceeded = 100 <= self.risk_amount  # Note the negative sign
             self.logger.info(f"Risk amount is ${self.risk_amount:,.2f} ")
             
             if is_threshold_exceeded:
                 self.logger.info(f"Risk threshold reached: Daily PnL ${self.daily_pnl:,.2f} <= -${self.risk_amount:,.2f}")
-                self.logger.info(f"Threshold is {RISK_PERCENT:.1%} of ${net_liq:,.2f}")
+                self.logger.info(f"Threshold is {self.risk_percent:.1%} of ${net_liq:,.2f}")
                 self.should_close_positions = True
                 
                 
