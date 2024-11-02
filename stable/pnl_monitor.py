@@ -2,13 +2,14 @@ import logging
 from ib_async import IB, MarketOrder, LimitOrder, PnL, PortfolioItem, AccountValue, Contract, Trade
 from typing import *
 from datetime import datetime
-import pytz
-RISK_PERCENT = 0.0033 # 1.5% risk threshold       
-
+import pytz 
+import os
+from dotenv import load_dotenv
+load_dotenv()
 class IBPortfolioTracker:
     def __init__(self):
         self.ib = IB()
-        #self.positions: Dict[str, PortfolioItem] = {}
+        self.risk_percent = float(os.getenv('RISK_PERCENT', 0.01))
         self.account = "DU7397764"
         self.total_realized_pnl = 0.0
         self.total_unrealized_pnl = 0.0
@@ -315,5 +316,6 @@ PnL Update:
 if __name__ == "__main__":
     portfolio_tracker = IBPortfolioTracker()
     portfolio_tracker.run()
+    
 
    
