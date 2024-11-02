@@ -169,6 +169,11 @@ RUN chmod -R 755 /home/tbot/develop/github/tbot-tradingboat/twsapi
 
 RUN git clone -b ${TBOT_TVWB_GIT_BRANCH} ${TBOT_TVWB_GIT_REPO} /home/tbot/develop/github/tradingview-webhooks-bot
 WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
+
+# Copy the local version of orders into the container
+COPY ./order_base.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/order_base.html
+COPY ./orders.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/orders.html
+
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
 # TBOT: Set the default directory
