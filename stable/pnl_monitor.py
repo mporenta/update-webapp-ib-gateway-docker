@@ -4,7 +4,7 @@ from typing import *
 from datetime import datetime
 import pytz
 RISK_PERCENT = 0.0033 # 1.5% risk threshold       
-damn = 0
+
 class IBPortfolioTracker:
     def __init__(self):
         self.ib = IB()
