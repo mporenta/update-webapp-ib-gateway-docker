@@ -1,205 +1,321 @@
-from ibapi.client import EClient
-from ibapi.wrapper import EWrapper
-from ibapi.contract import Contract
-from ibapi.order import Order
-import threading
-import time
-import pandas as pd
-from threading import Event
+import logging 
+from ib_async import IB, MarketOrder, LimitOrder, PnL, PortfolioItem, AccountValue, Contract, Trade
+from typing import *
 from datetime import datetime
-import logging
-
-class TradingApp(EWrapper, EClient):
+import pytz 
+import os
+from dotenv import load_dotenv
+load_dotenv()
+class IBPortfolioTracker:
     def __init__(self):
-        EClient.__init__(self,self)
-        self.pos_df = pd.DataFrame(columns=['Account', 'Symbol', 'SecType',
-                                            'Currency', 'Position', 'Avg cost'])
-        self.position_updates_received = False
-        self.starting_net_liq = None
-        self.current_unrealized_pnl = 0
-        self.current_realized_pnl = 0
-        self.stop_loss_triggered = False
-        self.exit_event = Event()
+        self.ib = IB()
+        self.risk_percent = float(os.getenv('RISK_PERCENT', 0.01))
+        self.account = "DU7397764"
+        self.total_realized_pnl = 0.0
+        self.total_unrealized_pnl = 0.0
+        self.daily_pnl = 0.0
+        self.all_have_orders = False
+        self.should_close_positions = False
+        self.net_liquidation = 0.0
         
-    def nextValidId(self, orderId):
-        super().nextValidId(orderId)
-        self.nextValidOrderId = orderId
-        print("NextValidId:", orderId)
+          # Set up logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger(__name__)
         
-    def position(self, account, contract, position, avgCost):
-        super().position(account, contract, position, avgCost)
-        dictionary = {"Account":account, "Symbol": contract.symbol, "SecType": contract.secType,
-                      "Currency": contract.currency, "Position": position, "Avg cost": avgCost}
-        if self.pos_df["Symbol"].str.contains(contract.symbol).any():
-            self.pos_df.loc[self.pos_df["Symbol"]==contract.symbol,"Position"] = position
-            self.pos_df.loc[self.pos_df["Symbol"]==contract.symbol,"Avg cost"] = avgCost
-        else:
-            self.pos_df = pd.concat((self.pos_df, pd.DataFrame([dictionary])),ignore_index=True)
+        # Connect to IB Gateway
+        try:
+            self.ib.connect("127.0.0.1", 4002, clientId=8)
+            self.logger.info("Connected successfully to IB Gateway")
             
-    def positionEnd(self):
-        super().positionEnd()
-        self.position_updates_received = True
-        print("All positions received")
+            # Wait for managed accounts to be populated
+            self.ib.waitOnUpdate(timeout=2)
 
-    def updatePortfolio(self, contract: Contract, position: float, marketPrice: float, marketValue: float,
-                        averageCost: float, unrealizedPNL: float, realizedPNL: float, accountName: str):
-        """Real-time portfolio updates"""
-        self.current_unrealized_pnl = unrealizedPNL
-        self.current_realized_pnl = realizedPNL
-        
-        # Calculate total P&L
-        total_pnl = unrealizedPNL + realizedPNL
-        
-        # Check if we have starting net liquidation value
-        if self.starting_net_liq is not None and not self.stop_loss_triggered:
-            loss_threshold = -0.01 * self.starting_net_liq  # -1% of starting value
+            # Get account
+            accounts = self.ib.managedAccounts()
+            self.logger.info(f"Managed accounts: {accounts}")
+            if not accounts:
+                raise Exception("No managed accounts available")
+                
+            self.account = accounts[0]
+            self.logger.info(f"Using account {self.account}")
             
-            if total_pnl <= loss_threshold:
-                print(f"\nStop loss triggered!")
-                print(f"Total P&L: ${total_pnl:.2f}")
-                print(f"Loss threshold: ${loss_threshold:.2f}")
-                print(f"Starting Net Liq: ${self.starting_net_liq:.2f}")
-                self.stop_loss_triggered = True
-                # Trigger trade_positions in a separate thread
-                threading.Thread(target=trade_positions, args=(self,)).start()
+            # Set up callbacks
+            self.ib.accountSummaryEvent += self.on_account_summary
+            self.ib.connectedEvent += self.onConnected
 
-    def updateAccountValue(self, key: str, val: str, currency: str, accountName: str):
-        """Called when account values update"""
-        if key == "NetLiquidation" and currency == "USD" and self.starting_net_liq is None:
-            self.starting_net_liq = float(val)
-            print(f"Starting Net Liquidation Value: ${self.starting_net_liq:.2f}")
+            # Request initial account summary
+            self.request_account_summary()
+            self.ib.newOrderEvent += self.get_trades
+            # Wait briefly for initial account data
+            #self.ib.sleep(2)
+            #self.ib.updatePortfolioEvent += self.on_portfolio_update
+            #self.on_portfolio_update(self.ib.portfolio())
+            self.ib.sleep(2)
+            
+            # Subscribe to PnL updates
+            self.pnl = self.ib.reqPnL(self.account)
+            if not self.pnl:
+                raise Exception("Failed to subscribe to PnL updates")
+            
+            self.logger.info(f"Successfully subscribed to PnL updates for account {self.account}")
+            self.ib.pnlEvent += self.on_pnl_update
+            
+        except Exception as e:
+            self.logger.error(f"Initialization failed: {str(e)}")
+            raise
 
-    def error(self, reqId: int, errorCode: int, errorString: str, advancedOrderRejectJson=""):
-        """Handle errors"""
-        print(f"Error {errorCode}: {errorString}")
-        if errorCode == 1100:  # Connectivity between IB and TWS has been lost
-            print("Connection lost to TWS")
-        elif errorCode == 1102:  # Connectivity between IB and TWS has been restored
-            print("Connection restored to TWS")
-        elif errorCode == 506:   # Requested market data is not subscribed
-            print("Market data subscription error")
+    def request_account_summary(self):
+        """Request account summary update"""
+        try:
+            # Request account summary
+            self.ib.reqAccountSummary()
+            self.logger.info("Requested account summary update")
+        except Exception as e:
+            self.logger.error(f"Error requesting account summary: {str(e)}")
 
-    def connectionClosed(self):
-        """Called when connection is closed"""
-        print("Connection closed")
-        self.exit_event.set()
+    def on_account_summary(self, value: AccountValue):
+        """Handle account summary updates"""
+        try:
+            if value.tag == 'NetLiquidation':
+                try:
+                    new_value = float(value.value)
+                    if new_value > 0:
+                        if new_value != self.net_liquidation:
+                            self.logger.info(f"Net liquidation changed: ${self.net_liquidation:,.2f} -> ${new_value:,.2f}")
+                        self.net_liquidation = new_value
+                    else:
+                        self.logger.warning(f"Received non-positive net liquidation value: {new_value}")
+                except ValueError:
+                    self.logger.error(f"Invalid net liquidation value received: {value.value}")
+        except Exception as e:
+            self.logger.error(f"Error processing account summary: {str(e)}")
 
-def websocket_con():
-    app.run()
+    def get_net_liquidation(self) -> float:
+        """Get the current net liquidation value"""
+        if self.net_liquidation <= 0:
+            # Request a fresh update if the value is invalid
+            self.request_account_summary()
+            self.ib.sleep(1)  # Give time for update to arrive
+        return self.net_liquidation
+    def get_trades(self, trade: Trade):
+        print(f"Trade received: {trade}")
+
+        return trade
+
+    def check_pnl_conditions(self,  pnl: PnL) -> bool:
+        """Check if PnL has exceeded risk threshold"""
+        try:
+            net_liq = self.get_net_liquidation()
+            if net_liq <= 0:
+                self.logger.warning(f"Invalid net liquidation value: ${net_liq:,.2f}")
+                return False
+            
+            self.daily_pnl = float(pnl.dailyPnL) if pnl.dailyPnL is not None else 0.0
+            self.risk_amount = net_liq * RISK_PERCENT
+            is_threshold_exceeded = self.daily_pnl <= -self.risk_amount  # Note the negative sign
+            #is_threshold_exceeded = 100 <= self.risk_amount  # Note the negative sign
+            self.logger.info(f"Risk amount is ${self.risk_amount:,.2f} ")
+            
+            if is_threshold_exceeded:
+                self.logger.info(f"Risk threshold reached: Daily PnL ${self.daily_pnl:,.2f} <= -${self.risk_amount:,.2f}")
+                self.logger.info(f"Threshold is {RISK_PERCENT:.1%} of ${net_liq:,.2f}")
+                self.should_close_positions = True
+                
+                
+                
+                
+                        
+                        
+                
+            return is_threshold_exceeded
+            
+        except Exception as e:
+            self.logger.error(f"Error checking PnL conditions: {str(e)}")
+            return False
+
     
-def usStk(symbol, sectype="STK", currency="USD", exchange="NASDAQ"):
-    contract = Contract()
-    contract.symbol = symbol
-    contract.secType = sectype
-    contract.currency = currency
-    contract.exchange = exchange
-    return contract
+   
 
-def mktOrder(direction, quantity):
-    order = Order()
-    order.action = direction
-    order.orderType = "MKT"
-    order.totalQuantity = quantity
-    order.eTradeOnly = ""
-    order.firmQuoteOnly = ""
-    return order
-
-def trade_positions(app_instance):
-    """Close all positions"""
-    app_instance.position_updates_received = False
-    app_instance.reqPositions()
+    def close_all_positions(self, account: str = ""):
     
-    # Wait until positions are received
-    timeout = 10  # seconds
-    start_time = time.time()
-    while not app_instance.position_updates_received:
-        time.sleep(0.1)
-        if time.time() - start_time > timeout:
-            print("Timeout waiting for positions")
+        # Get all portfolio positions
+        portfolio_items =self.ib.portfolio(account)
+        if not portfolio_items:
+            print("No positions to close")
             return
     
-    # Process each position
-    for index, row in app_instance.pos_df.iterrows():
-        position = float(row['Position'])
-        symbol = row['Symbol']
+        trades = []
+        # Get current NY time
+        ny_tz = pytz.timezone('America/New_York')
+        ny_time = datetime.now(ny_tz)
+        current_hour = ny_time.hour
+        # Determine if we're in after-hours (16:00-20:00 NY time)
+        is_after_hours = 16 <= current_hour < 23
         
-        if position != 0:  # Only process non-zero positions
-            # Determine order direction and quantity
-            if position > 0:  # Long position
-                direction = "SELL"
-                quantity = abs(position)
-                print(f"Closing long position in {symbol}: {quantity} shares")
-            else:  # Short position
-                direction = "BUY"
-                quantity = abs(position)
-                print(f"Covering short position in {symbol}: {quantity} shares")
+        # For each position, ensure contract details are complete
+        for item in portfolio_items:
+            if item.position == 0:
+                continue
             
-            # Place the order
-            app_instance.placeOrder(
-                app_instance.nextValidOrderId,
-                usStk(symbol),
-                mktOrder(direction, quantity)
-            )
-            app_instance.nextValidOrderId += 1
-            time.sleep(1)  # Add delay between orders
+            # Set action based on position direction
+            action = 'BUY' if item.position < 0 else 'SELL'
+            quantity = abs(item.position)
+        
+            print(f"\nProcessing {item.contract.symbol}: {action} {quantity} shares")
+        
+            try:
+                # Ensure contract has proper exchange info
+                contract = item.contract
+                contract.exchange = contract.primaryExchange  # Use primary exchange for orders
+            
+                # Create a separate contract for market data that uses SMART routing
+                market_contract = Contract()
+                market_contract.symbol = contract.symbol
+                market_contract.secType = contract.secType
+                market_contract.currency = contract.currency
+                market_contract.exchange = 'SMART'
+                market_contract.primaryExchange = contract.primaryExchange
+                
+                #Time of day condition for after hours trading
+                if not is_after_hours:
+                    order = MarketOrder(
+                    action=action,
+                    totalQuantity=quantity,
+                    tif='GTC'
+                )
+                else:
+            
+                    # Get recent price data using SMART routing
+                    bars =self.ib.reqHistoricalData(
+                        contract=market_contract,
+                        endDateTime='',
+                        durationStr='60 S',
+                        barSizeSetting='1 min',
+                        whatToShow='TRADES',
+                        useRTH=False,
+                        formatDate=1
+                    )
+            
+                    if not bars or len(bars) == 0:
+                        print(f"Warning: No historical data for {contract.symbol}, using market price")
+                        last_price = item.marketPrice
+                        
+                    else:
+                        last_price = bars[-1].close
+                  
+                
+                        # Set limit price with offset
+                        offset = 0.01
+                        limit_price = (last_price + offset if action == 'BUY' 
+                                    else last_price - offset)
+                    
+                        # Create limit order
+                        order = LimitOrder(
+                            action=action,
+                            totalQuantity=quantity,
+                            lmtPrice=round(limit_price, 2),
+                            tif='GTC',  # Good Till Canceled
+                            outsideRth=True  # Allow trading outside regular trading hours
+                        )
+             
+                    
+                    
+            
+                # Place the order
+                trade =self.ib.placeOrder(contract, order)
+                trades.append(trade)
+            
+                print(f"Placed order to close {contract.symbol}: "
+                      f"{action} {quantity} @ {limit_price:.2f}")
+            
+            except Exception as e:
+                print(f"Error closing position for {item.contract.symbol}: {str(e)}")
     
-    # After closing positions, trigger exit
-    app_instance.exit_event.set()
+        return trades
+    def on_pnl_update(self, pnl: PnL):
+        """Handle PnL updates from IB"""
+        try:
+            # Convert PnL values to float to ensure they're numeric
+            self.daily_pnl = float(pnl.dailyPnL) if pnl.dailyPnL is not None else 0.0
+            self.total_unrealized_pnl = float(pnl.unrealizedPnL) if pnl.unrealizedPnL is not None else 0.0
+            self.total_realized_pnl = float(pnl.realizedPnL) if pnl.realizedPnL is not None else 0.0
+            
+            self.logger.info(f"""
+PnL Update:
+- Daily P&L: ${self.daily_pnl:,.2f}
+- Unrealized P&L: ${self.total_unrealized_pnl:,.2f}
+- Realized P&L: ${self.total_realized_pnl:,.2f}
+- Current Net Liquidation: ${self.get_net_liquidation():,.2f}
+""")
+            
+            # Check PnL conditions and get positions if needed
+            if self.check_pnl_conditions(self.pnl):
+                positions = [pos for pos in self.ib.positions() if pos.position != 0]
+                existing_trades = self.ib.trades()
+                
+                # Check if all positions have pending orders
+                self.all_have_orders = all(
+                    any(
+                        trade.contract.conId == position.contract.conId and 
+                        trade.orderStatus.status not in ['Filled', 'Cancelled', 'Inactive', 'Submitted']
+                        for trade in existing_trades
+                    )
+                    for position in positions
+                )
+                
+                if not self.all_have_orders:
+                    self.logger.info("Some positions don't have pending orders - action required")
+                    
+                    
+                else:
+                    self.ib.sleep(1)
+                    self.logger.info("Waiting..ok, so chill..")   
+                    
+                    self.logger.info("All positions already have pending orders")
+                    self.ib.loopUntil(self.all_have_orders, timeout=5)
+                if self.all_have_orders:
+                    self.ib.disconnect()
+                    self.logger.info("Disconnected from IB Gateway...bitch....")
+                   
+        except Exception as e:
+            self.logger.error(f"Error processing PnL update: {str(e)}")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(f'ibkr_connection_{datetime.now().strftime("%Y%m%d")}.log'),
-        logging.StreamHandler()
-    ]
-)
+    def onConnected(self):
+        self.logger.info("Connected to IB Gateway.")
+        # Request account summary when connected
+        self.request_account_summary()
 
-logger = logging.getLogger('IBKR_Connection')
+    def run(self):
+        """Start the event loop"""
+        trades = []
+        try:
+            self.logger.info("Starting IB event loop...")
+           
+            while True:
+                self.ib.sleep(1)
+                if self.should_close_positions:
+                    self.logger.info("Initiating position closing...")
+                    trades = self.close_all_positions()
+                    self.should_close_positions = False  # Reset flag
+                            
+                            
+            
+                
+                   
+                    self.ib.sleep(1)
+                   
+                                                                    
+        except KeyboardInterrupt:
+            self.logger.info("Shutting down...")
+        #finally:
+            #self.ib.disconnect()
 
 if __name__ == "__main__":
-    app = TradingApp()
+    portfolio_tracker = IBPortfolioTracker()
+    portfolio_tracker.run()
     
-    try:
-        logger.info("Attempting to connect to IB Gateway at 127.0.0.1:4002")
-        app.connect("127.0.0.1", 4002, clientId=7)
-        
-        # Start websocket connection
-        logger.info("Starting websocket connection thread")
-        con_thread = threading.Thread(target=websocket_con, daemon=True)
-        con_thread.start()
-        
-        logger.info("Waiting for connection to establish...")
-        time.sleep(1)  # Allow time for connection to establish
-        
-        if app.isConnected():
-            logger.info("Successfully connected to IB Gateway")
-        else:
-            logger.error("Failed to establish connection to IB Gateway")
-            raise ConnectionError("Could not connect to IB Gateway")
 
-        # Request account updates
-        account_id = 'DU0000000'  # Replace with your account number
-        logger.info(f"Requesting account updates for account {account_id}")
-        app.reqAccountUpdates(True, account_id)
-        
-        # Wait for exit event instead of polling
-        logger.info("Waiting for exit event...")
-        app.exit_event.wait()
-        
-    except KeyboardInterrupt:
-        logger.warning("Received keyboard interrupt, initiating shutdown...")
-    except Exception as e:
-        logger.error(f"An error occurred: {str(e)}", exc_info=True)
-    finally:
-        logger.info("Starting cleanup process...")
-        try:
-            logger.info(f"Stopping account updates for account {account_id}")
-            app.reqAccountUpdates(False, account_id)
-            
-            logger.info("Disconnecting from IB Gateway")
-            app.disconnect()
-            
-            logger.info("Cleanup completed successfully")
-        except Exception as e:
-            logger.error(f"Error during cleanup: {str(e)}", exc_info=True)
+   
