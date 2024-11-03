@@ -36,6 +36,7 @@ services:
       TBOT_TELEGRAM_CHAT_ID: ${TBOT_TELEGRAM_CHAT_ID:-}
       TBOT_NGROK: ${TBOT_NGROK:-}
       TBOT_PROFILER: ${TBOT_PROFILER:-False}
+      PORTFOLIO_SERVICE_URL: ${PORTFOLIO_SERVICE_URL:-http://pnl-monitor:5001}
     ports:
       - 127.0.0.1:4001:4001
       - 127.0.0.1:4002:4002
@@ -72,6 +73,8 @@ services:
       NGROK_REGION: us
   pnl-monitor:
     container_name: pnl-monitor
+    ports:
+    - "5001:5001"
     build:
       context: ./stable
       dockerfile: Dockerfile.pnl_monitor
@@ -82,6 +85,7 @@ services:
       PYTHONUNBUFFERED: 1
       TBOT_IBKR_PORT: ${TBOT_IBKR_PORT:-4002}
       TBOT_IBKR_IPADDR: ${TBOT_IBKR_IPADDR:-127.0.0.1}
+      ACCOUNT_NUMBER: ${ACCOUNT_NUMBER}
 
     volumes:
       - ./stable/pnl_monitor.py:/home/tbot/pnl_monitor.py

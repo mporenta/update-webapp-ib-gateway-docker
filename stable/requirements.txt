@@ -2,3 +2,4 @@ pandas
 ibapi
 ib_async
 python-dotenv
+pytz

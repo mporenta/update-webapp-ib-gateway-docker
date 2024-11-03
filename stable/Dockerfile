@@ -54,7 +54,7 @@ COPY ./scripts /root/scripts
 FROM ubuntu:22.04
 
 # Define cache buster build argument
-ARG CACHE_BUST=0
+ARG CACHE_BUST=1
 
 ENV IB_GATEWAY_VERSION=10.23.2a
 
@@ -173,6 +173,7 @@ WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
 # Copy the local version of orders into the container
 COPY ./order_base.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/order_base.html
 COPY ./orders.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/orders.html
+COPY ./tbot_dashboard.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/tbot_dashboard.html
 
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt

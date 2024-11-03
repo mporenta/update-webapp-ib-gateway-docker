@@ -5,10 +5,11 @@ from datetime import datetime
 import pytz 
 import os
 from dotenv import load_dotenv
-load_dotenv()
+
 class IBPortfolioTracker:
     def __init__(self):
         self.ib = IB()
+        self.dotenv= load_dotenv()
         self.risk_percent = float(os.getenv('RISK_PERCENT', 0.01))
         self.account = "DU7397764"
         self.total_realized_pnl = 0.0
@@ -58,8 +59,7 @@ class IBPortfolioTracker:
             # Subscribe to PnL updates
             self.pnl = self.ib.reqPnL(self.account)
             if not self.pnl:
-                raise Exception("Failed to subscribe to PnL updates")
-            
+                raise RuntimeError("Failed to subscribe to PnL updates")
             self.logger.info(f"Successfully subscribed to PnL updates for account {self.account}")
             self.ib.pnlEvent += self.on_pnl_update
             

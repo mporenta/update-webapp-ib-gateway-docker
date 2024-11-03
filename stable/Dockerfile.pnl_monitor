@@ -52,15 +52,33 @@ RUN useradd -m tbot
 # Set the working directory to the user's home directory
 WORKDIR /home/tbot
 
+# Set default git repo
+ARG PNL_MONITOR_GIT_REPO=https://github.com/mporenta/portfolio-monitor.git
+ARG PNL_MONITOR_GIT_BRANCH=main
+RUN git clone --branch $PNL_MONITOR_GIT_BRANCH $PNL_MONITOR_GIT_REPO /home/tbot/develop/github/portfolio-monitor
+WORKDIR /home/tbot/develop/github/portfolio-monitor
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY ./pnl_dashboard.html /home/tbot/develop/github/portfolio-monitor/src/templates/pnl_dashboard.html
+COPY ./style.css /home/tbot/develop/github/portfolio-monitor/src/static/css/style.css
+
 # Copy your pnl_monitor.py script and requirements.txt into the container
-COPY pnl_monitor.py /home/tbot
-COPY pnl_dev.py /home/tbot
-COPY run-python.sh /home/tbot
-COPY requirements.txt /home/tbot
+#COPY pnl_monitor.py /home/tbot
+#COPY pnl_dev.py /home/tbot
+#COPY run-python.sh /home/tbot
+#COPY requirements.txt /home/tbot
 
-# Install Python dependencies
-RUN pip install -r requirements.txt
+WORKDIR /home/tbot/
+# Copy the shell script into the container
+COPY ./run-python.sh /home/tbot/run-python.sh
 
-
+# Make the shell script executable
 RUN chmod +x /home/tbot/run-python.sh
-CMD ["./run-python.sh"]
+
+# Expose the port that pnl_web_service.py listens on (e.g., 5001)
+EXPOSE 5001
+
+# Set the entry point to the shell script
+ENTRYPOINT ["/home/tbot/run-python.sh"]
