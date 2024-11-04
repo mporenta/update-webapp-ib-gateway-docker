@@ -78,4 +78,4 @@ COPY ./style.css /home/tbot/develop/github/portfolio-monitor/src/static/css/styl
 EXPOSE 5001
 
 RUN chmod +x /home/tbot/develop/github/portfolio-monitor/run-python.sh
-CMD ["./run-python.sh"]
+CMD ["/home/tbot/develop/github/portfolio-monitor/run-python.sh"]
