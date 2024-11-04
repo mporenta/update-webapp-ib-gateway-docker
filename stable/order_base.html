@@ -30,6 +30,9 @@
         <li class="nav-item">
             <a class="nav-link" href="/errors">Errors</a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link" href="/portfolio">Portfolio</a>
+        </li>
     </ul>
 
     <div class="container mt-3">
@@ -46,6 +49,14 @@
                 placeholder="Enter token key">
         </div>
         <div id="responseMessage" class="mb-3"></div>
+        <!-- Add status filter before the content block -->
+        <div class="mb-3">
+            <label for="statusFilter" class="form-label">Filter by Status:</label>
+            <select id="statusFilter" class="form-select">
+                <option value="">All Statuses</option>
+            </select>
+        </div>
+
 
         {% block content %}{% endblock %}
     </div>
@@ -169,7 +180,41 @@
                     },
                 ]
             });
+            // Populate status filter when data is loaded
+            dataTable.on('xhr', function () {
+                var data = dataTable.data();
+                var statuses = new Set();
 
+                // Collect unique statuses
+                data.each(function (row) {
+                    if (row.orderstatus) {
+                        statuses.add(row.orderstatus);
+                    }
+                });
+
+                // Update status filter dropdown
+                var statusFilter = $('#statusFilter');
+                statusFilter.empty();
+                statusFilter.append('<option value="">All Statuses</option>');
+
+                Array.from(statuses).sort().forEach(function (status) {
+                    statusFilter.append(`<option value="${status}">${status}</option>`);
+                });
+
+                // Maintain selected value if exists
+                var selectedValue = statusFilter.val();
+                if (selectedValue) {
+                    statusFilter.val(selectedValue);
+                }
+            });
+
+            // Handle status filter change
+            $('#statusFilter').on('change', function () {
+                var selectedStatus = $(this).val();
+
+                // Custom filter for the status column (orderstatus)
+                dataTable.column(12).search(selectedStatus).draw();
+            });
             $('#data_order').on('click', '.close-position, .cancel-order', function () {
                 const ticker = $(this).data('ticker');
                 const isClosePosition = $(this).hasClass('close-position');
