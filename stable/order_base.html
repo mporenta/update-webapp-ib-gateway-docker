@@ -504,96 +504,112 @@
                 info: false
             });
             dataTable.on('xhr', function (e, settings, json) {
+                // Add this at the start of the xhr handler
+                console.group('DataTable XHR Response');
+                console.log('Raw JSON response:', json);
+                console.log('Settings:', settings);
+
                 var data = dataTable.data();
+                console.log('DataTable data:', data);
 
-                // 1. Handle Status Filters
-                var statuses = new Set();
-                data.each(function (row) {
-                    if (row.orderstatus) {
-                        statuses.add(row.orderstatus);
-                    }
-                });
+                try {
+                    // Your existing totals calculations
+                    var totals = Array.from(data).reduce((acc, row) => {
+                        acc.unrealizedPnL += parseFloat(row.unrealizedpnl) || 0;
+                        acc.realizedPnL += parseFloat(row.realizedpnl) || 0;
+                        return acc;
+                    }, {
+                        unrealizedPnL: 0,
+                        realizedPnL: 0
+                    });
+                    console.log('Calculated totals:', totals);
 
-                // Update status filter dropdown
-                var statusFilter = $('#statusFilter');
-                statusFilter.empty();
-                statusFilter.append('<option value="">All Statuses</option>');
-                Array.from(statuses).sort().forEach(function (status) {
-                    statusFilter.append(`<option value="${status}">${status}</option>`);
-                });
+                    const dailyPnL = totals.unrealizedPnL + totals.realizedPnL;
+                    const riskFactor = parseFloat($('#riskFactor').val()) || 0.01;
+                    const netLiquidation = parseFloat(json.net_liquidation) || 0;
+                    const riskAmount = netLiquidation * riskFactor;
 
-                // Maintain selected value
-                var selectedValue = statusFilter.val();
-                if (selectedValue) {
-                    statusFilter.val(selectedValue);
+                    console.log({
+                        dailyPnL,
+                        riskFactor,
+                        netLiquidation,
+                        riskAmount
+                    });
+
+                    // Updating Summary Panel values
+                    console.log('Updating summary panel with values:', {
+                        dailyPnL: `$${dailyPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        unrealizedPnL: `$${totals.unrealizedPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        realizedPnL: `$${totals.realizedPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        netLiquidation: `$${netLiquidation.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                        riskAmount: `$${riskAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    });
+
+                    // Your existing code for updating the DOM
+                    $('#daily-pnl').text(`$${dailyPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                    $('#unrealized-pnl').text(`$${totals.unrealizedPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                    $('#realized-pnl').text(`$${totals.realizedPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                    $('#net-liquidation').text(`$${netLiquidation.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                    $('#risk-amount').text(`$${riskAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+
+                    // Log position updates
+                    console.log('Updating position tables with data:', {
+                        activePositions: Array.from(data).filter(row => row.position !== 0),
+                        closedPositions: Array.from(data).filter(row => row.position === 0 && row.realizedpnl !== 0)
+                    });
+
+                    // Update position tables
+                    updatePositionTables(data);
+
+                } catch (error) {
+                    console.error('Error processing data:', error);
+                    console.error('Error stack:', error.stack);
                 }
-
-                // 2. Calculate Summary Panel Values
-                var totals = Array.from(data).reduce((acc, row) => {
-                    acc.unrealizedPnL += parseFloat(row.unrealizedpnl) || 0;
-                    acc.realizedPnL += parseFloat(row.realizedpnl) || 0;
-                    return acc;
-                }, {
-                    unrealizedPnL: 0,
-                    realizedPnL: 0
-                });
-
-                const dailyPnL = totals.unrealizedPnL + totals.realizedPnL;
-                const riskFactor = parseFloat($('#riskFactor').val()) || 0.01;
-                const netLiquidation = parseFloat(json.net_liquidation) || 0;
-                const riskAmount = netLiquidation * riskFactor;
-
-                // 3. Update Summary Panel
-                $('#daily-pnl').text(`$${dailyPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-                $('#unrealized-pnl').text(`$${totals.unrealizedPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-                $('#realized-pnl').text(`$${totals.realizedPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-                $('#net-liquidation').text(`$${netLiquidation.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-                $('#risk-amount').text(`$${riskAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-
-                // 4. Update Position Tables
-                updatePositionTables(data);
+                console.groupEnd();
             });
 
-            // Add risk factor change handler
-            $('#riskFactor').on('change', function () {
-                const riskFactor = parseFloat($(this).val()) || 0.01;
-                const netLiquidation = parseFloat($('#net-liquidation').text().replace('$', '').replace(',', '')) || 0;
-                const riskAmount = netLiquidation * riskFactor;
-                $('#risk-amount').text(`$${riskAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-            });
-
-            // Function to update position tables
+            // Also add error logging to the updatePositionTables function
             function updatePositionTables(data) {
-                // Clear existing data
-                activePositionsTable.clear();
-                closedPositionsTable.clear();
+                console.group('Updating Position Tables');
+                try {
+                    console.log('Clearing existing table data');
+                    activePositionsTable.clear();
+                    closedPositionsTable.clear();
 
-                // Separate active and closed positions
-                Array.from(data).forEach(row => {
-                    if (row.position !== 0) {
-                        activePositionsTable.row.add([
-                            row.ticker,
-                            row.position,
-                            row.tv_price,
-                            row.mrkvalue,
-                            row.avgfillprice,
-                            row.unrealizedpnl,
-                            row.action  // Using action as exchange
-                        ]);
-                    } else if (row.realizedpnl !== 0) {
-                        closedPositionsTable.row.add([
-                            row.ticker,
-                            row.qty,
-                            row.tv_price,
-                            row.realizedpnl,
-                            row.action  // Using action as exchange
-                        ]);
-                    }
-                });
+                    // Separate active and closed positions
+                    Array.from(data).forEach(row => {
+                        console.log('Processing row:', row);
+                        if (row.position !== 0) {
+                            console.log('Adding active position:', row);
+                            activePositionsTable.row.add([
+                                row.ticker,
+                                row.position,
+                                row.tv_price,
+                                row.mrkvalue,
+                                row.avgfillprice,
+                                row.unrealizedpnl,
+                                row.action
+                            ]);
+                        } else if (row.realizedpnl !== 0) {
+                            console.log('Adding closed position:', row);
+                            closedPositionsTable.row.add([
+                                row.ticker,
+                                row.qty,
+                                row.tv_price,
+                                row.realizedpnl,
+                                row.action
+                            ]);
+                        }
+                    });
 
-                // Redraw tables
-                activePositionsTable.draw();
-                closedPositionsTable.draw();
+                    console.log('Redrawing tables');
+                    activePositionsTable.draw();
+                    closedPositionsTable.draw();
+                } catch (error) {
+                    console.error('Error updating position tables:', error);
+                    console.error('Error stack:', error.stack);
+                }
+                console.groupEnd();
             }
             // Update status filter dropdown
             var statusFilter = $('#statusFilter');
