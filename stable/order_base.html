@@ -295,14 +295,75 @@
         </li>
     </ul>
 
+    <div class="container mt-4">
+        <!-- Risk Factor Input -->
+        <div class="mb-3">
+            <label for="riskFactor" class="form-label">Risk Factor:</label>
+            <input type="number" id="riskFactor" class="form-control" value="0.01" step="0.01" min="0" max="1"
+                style="width: 150px;">
+        </div>
 
-    <div id="responseMessage" class="mb-3"></div>
-    <!-- Add status filter before the content block -->
-    <div class="mb-3">
-        <label for="statusFilter" class="form-label">Filter by Status:</label>
-        <select id="statusFilter" class="form-select">
-            <option value="">All Statuses</option>
-        </select>
+        <!-- Summary Panel -->
+        <div class="summary-panel">
+            <div class="metric-card">
+                <div class="metric-label">Daily P&L</div>
+                <div id="daily-pnl" class="metric-value">$0.00</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Unrealized P&L</div>
+                <div id="unrealized-pnl" class="metric-value">$0.00</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Realized P&L</div>
+                <div id="realized-pnl" class="metric-value">$0.00</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Net Liquidation</div>
+                <div id="net-liquidation" class="metric-value">$0.00</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Risk Amount</div>
+                <div id="risk-amount" class="metric-value">$0.00</div>
+            </div>
+        </div>
+
+        <!-- Active Positions -->
+        <div class="positions-container">
+            <h2>Active Positions</h2>
+            <table id="active-positions" class="display responsive nowrap" width="100%">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Position</th>
+                        <th>Market Price</th>
+                        <th>Market Value</th>
+                        <th>Average Cost</th>
+                        <th>Unrealized P&L</th>
+                        <th>Exchange</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Closed Positions -->
+        <div class="positions-container">
+            <h2>Closed Positions</h2>
+            <table id="closed-positions" class="display responsive nowrap" width="100%">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Last Position</th>
+                        <th>Last Price</th>
+                        <th>Realized P&L</th>
+                        <th>Exchange</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
     </div>
 
 
@@ -428,12 +489,25 @@
                     },
                 ]
             });
-            // Populate status filter when data is loaded
-            dataTable.on('xhr', function () {
-                var data = dataTable.data();
-                var statuses = new Set();
+            // Add this inside your document.ready function
+            var activePositionsTable = $('#active-positions').DataTable({
+                responsive: true,
+                paging: false,
+                searching: false,
+                info: false
+            });
 
-                // Collect unique statuses
+            var closedPositionsTable = $('#closed-positions').DataTable({
+                responsive: true,
+                paging: false,
+                searching: false,
+                info: false
+            });
+            dataTable.on('xhr', function (e, settings, json) {
+                var data = dataTable.data();
+
+                // 1. Handle Status Filters
+                var statuses = new Set();
                 data.each(function (row) {
                     if (row.orderstatus) {
                         statuses.add(row.orderstatus);
@@ -444,17 +518,97 @@
                 var statusFilter = $('#statusFilter');
                 statusFilter.empty();
                 statusFilter.append('<option value="">All Statuses</option>');
-
                 Array.from(statuses).sort().forEach(function (status) {
                     statusFilter.append(`<option value="${status}">${status}</option>`);
                 });
 
-                // Maintain selected value if exists
+                // Maintain selected value
                 var selectedValue = statusFilter.val();
                 if (selectedValue) {
                     statusFilter.val(selectedValue);
                 }
+
+                // 2. Calculate Summary Panel Values
+                var totals = Array.from(data).reduce((acc, row) => {
+                    acc.unrealizedPnL += parseFloat(row.unrealizedpnl) || 0;
+                    acc.realizedPnL += parseFloat(row.realizedpnl) || 0;
+                    return acc;
+                }, {
+                    unrealizedPnL: 0,
+                    realizedPnL: 0
+                });
+
+                const dailyPnL = totals.unrealizedPnL + totals.realizedPnL;
+                const riskFactor = parseFloat($('#riskFactor').val()) || 0.01;
+                const netLiquidation = parseFloat(json.net_liquidation) || 0;
+                const riskAmount = netLiquidation * riskFactor;
+
+                // 3. Update Summary Panel
+                $('#daily-pnl').text(`$${dailyPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                $('#unrealized-pnl').text(`$${totals.unrealizedPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                $('#realized-pnl').text(`$${totals.realizedPnL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                $('#net-liquidation').text(`$${netLiquidation.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+                $('#risk-amount').text(`$${riskAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+
+                // 4. Update Position Tables
+                updatePositionTables(data);
             });
+
+            // Add risk factor change handler
+            $('#riskFactor').on('change', function () {
+                const riskFactor = parseFloat($(this).val()) || 0.01;
+                const netLiquidation = parseFloat($('#net-liquidation').text().replace('$', '').replace(',', '')) || 0;
+                const riskAmount = netLiquidation * riskFactor;
+                $('#risk-amount').text(`$${riskAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+            });
+
+            // Function to update position tables
+            function updatePositionTables(data) {
+                // Clear existing data
+                activePositionsTable.clear();
+                closedPositionsTable.clear();
+
+                // Separate active and closed positions
+                Array.from(data).forEach(row => {
+                    if (row.position !== 0) {
+                        activePositionsTable.row.add([
+                            row.ticker,
+                            row.position,
+                            row.tv_price,
+                            row.mrkvalue,
+                            row.avgfillprice,
+                            row.unrealizedpnl,
+                            row.action  // Using action as exchange
+                        ]);
+                    } else if (row.realizedpnl !== 0) {
+                        closedPositionsTable.row.add([
+                            row.ticker,
+                            row.qty,
+                            row.tv_price,
+                            row.realizedpnl,
+                            row.action  // Using action as exchange
+                        ]);
+                    }
+                });
+
+                // Redraw tables
+                activePositionsTable.draw();
+                closedPositionsTable.draw();
+            }
+            // Update status filter dropdown
+            var statusFilter = $('#statusFilter');
+            statusFilter.empty();
+            statusFilter.append('<option value="">All Statuses</option>');
+
+            Array.from(statuses).sort().forEach(function (status) {
+                statusFilter.append(`<option value="${status}">${status}</option>`);
+            });
+
+            // Maintain selected value if exists
+            var selectedValue = statusFilter.val();
+            if (selectedValue) {
+                statusFilter.val(selectedValue);
+            }
             // Function to update status filter
             function updateStatusFilter() {
                 var statusColumn = dataTable.column(12); // orderstatus column
@@ -471,13 +625,9 @@
                 });
             }
 
-            // Update filter when data is loaded/reloaded
-            dataTable.on('xhr.dt', function () {
-                updateStatusFilter();
-            });
 
-            // Initial population
-            updateStatusFilter();
+
+
 
             // Handle status filter change
             $('#statusFilter').on('change', function () {
@@ -488,7 +638,7 @@
             });
 
 
-        
+
             $('#data_order').on('click', '.close-position, .cancel-order', function () {
                 const ticker = $(this).data('ticker');
                 const isClosePosition = $(this).hasClass('close-position');
