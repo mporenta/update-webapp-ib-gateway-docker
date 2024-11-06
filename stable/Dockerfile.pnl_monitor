@@ -62,8 +62,8 @@ WORKDIR /home/tbot/develop/github/portfolio-monitor
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./pnl_dashboard.html /home/tbot/develop/github/portfolio-monitor/src/templates/pnl_dashboard.html
-COPY ./style.css /home/tbot/develop/github/portfolio-monitor/src/static/css/style.css
+#COPY ./pnl_dashboard.html /home/tbot/develop/github/portfolio-monitor/src/templates/pnl_dashboard.html
+#COPY ./style.css /home/tbot/develop/github/portfolio-monitor/src/static/css/style.css
 
 # Copy your pnl_monitor.py script and requirements.txt into the container
 #COPY pnl_monitor.py /home/tbot
