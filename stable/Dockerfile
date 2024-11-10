@@ -171,16 +171,18 @@ RUN git clone -b ${TBOT_TVWB_GIT_BRANCH} ${TBOT_TVWB_GIT_REPO} /home/tbot/develo
 WORKDIR /home/tbot/develop/github/tradingview-webhooks-bot/src
 
 # Copy the local version of orders into the container
-COPY ./order_base.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/order_base.html
-COPY ./orders.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/orders.html
-COPY ./tbot_dashboard.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/tbot_dashboard.html
+#COPY ./order_base.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/order_base.html
+#COPY ./order_base.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/orders.html
+#COPY ./main.py /home/tbot/develop/github/tradingview-webhooks-bot/src/main.py
+#COPY ./tbot_dashboard.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/tbot_dashboard.html
+#COPY ./service_error.html /home/tbot/develop/github/tradingview-webhooks-bot/src/templates/service_error.html
 
 # Install dependencies in the virtual environment
 RUN pip install -r requirements.txt
 # TBOT: Set the default directory
 WORKDIR /home/tbot/develop/github/tbot-tradingboat
 # Copy the PnL monitoring script into the TBOT_APP_HOME directory
-COPY ./pnl_monitor.py /home/tbot/develop/github/tbot-tradingboat/pnl_monitor.py
+#COPY ./pnl_monitor.py /home/tbot/develop/github/tbot-tradingboat/pnl_monitor.py
 
 COPY ./scripts/fork_ports_delayed.sh /root/scripts/fork_ports_delayed.sh
 COPY ./scripts/run_x11_vnc.sh /root/scripts/run_x11_vnc.sh
