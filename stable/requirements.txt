@@ -1,3 +1,13 @@
 ib_async
+asyncio
 python-dotenv
 pytz
+pathlib
+flask
+flask_cors
+requests
+datetime
+werkzeug
+dataclasses
+setuptools
+waitress
