@@ -6,6 +6,9 @@
 #
 
 FROM ubuntu:22.04 AS setup
+ENV IB_GATEWAY_VERSION=10.23.2a
+ENV IB_GATEWAY_RELEASE_CHANNEL=latest
+ENV IBC_VERSION=3.17.0
 
 # Prepare system
 RUN apt-get update -y
@@ -46,6 +49,7 @@ RUN apt-get install -y python3.11 python3.11-venv python3.11-dev python3.11-dist
 # Install netcat for the wait-for-ib.sh script
 RUN apt-get update && apt-get install -y netcat
 
+
 # Create a non-root user and set its home directory
 RUN useradd -m tbot
 
@@ -58,7 +62,7 @@ ARG PNL_MONITOR_GIT_REPO=https://github.com/mporenta/portfolio-monitor.git
 ARG PNL_MONITOR_GIT_BRANCH=main
 RUN git clone --branch $PNL_MONITOR_GIT_BRANCH $PNL_MONITOR_GIT_REPO /home/tbot/develop/github/portfolio-monitor
 WORKDIR /home/tbot/develop/github/portfolio-monitor
-
+COPY ./requirements.txt  /home/tbot/develop/github/portfolio-monitor/requirements.txt 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -66,16 +70,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 #COPY ./style.css /home/tbot/develop/github/portfolio-monitor/src/static/css/style.css
 
 # Copy your pnl_monitor.py script and requirements.txt into the container
-#COPY pnl_monitor.py /home/tbot
+#COPY ./pnl_monitor.py  /home/tbot/develop/github/portfolio-monitor/src/pnl_monitor.py
 #COPY pnl_dev.py /home/tbot
-#COPY run-python.sh /home/tbot
-#COPY requirements.txt /home/tbot
+#COPY ./run-python.sh /home/tbot/develop/github/portfolio-monitor/run-python.sh
+
 
 
 
 
 # Expose the port that pnl_web_service.py listens on (e.g., 5001)
 EXPOSE 5001
-
-RUN chmod +x /home/tbot/develop/github/portfolio-monitor/run-python.sh
+#RUN dos2unix /root/scripts/*.sh && chmod a+x /root/scripts/*.sh
+# Ensure the script is executable
+RUN dos2unix /home/tbot/develop/github/portfolio-monitor/run-python.sh && chmod a+x /home/tbot/develop/github/portfolio-monitor/run-python.sh
+# ENTRYPOINT to run the script
 CMD ["/home/tbot/develop/github/portfolio-monitor/run-python.sh"]
