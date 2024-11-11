@@ -113,7 +113,7 @@ services:
     image: ngrok/ngrok:3.5.0-alpine
     restart: always
     container_name: ngrok-pnl-monitor
-    command: tunnel --label edge="${NGROK_EDGE_PNL}" pnl-monitor:5001
+    command: tunnel --label edge="${NGROK_EDGE_PNL}"  flask-dashboard:5001
     ports:
     - 80:80
     networks:
