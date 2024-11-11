@@ -1,0 +1,65 @@
+services:
+  ib-gateway:
+    # ... (keep existing configuration)
+
+  redis:
+    # ... (keep existing configuration)
+
+  ngrok:
+    # ... (keep existing configuration)
+
+  pnl-monitor:
+    container_name: pnl-monitor
+    build:
+      context: ./stable
+      dockerfile: Dockerfile.pnl_monitor
+      args:
+        MONITOR_PNL_GIT_REPO: ${MONITOR_PNL_GIT_REPO:-https://github.com/mporenta/portfolio-monitor.git}
+        MONITOR_PNL_GIT_REPO_BRANCH: "${MONITOR_PNL_GIT_REPO_BRANCH:-main}"
+    depends_on:
+      - ngrok-pnl
+      - ib-gateway
+    volumes:
+      - pnl_data:/app/data
+    ports:
+      - 5002:5002  # Changed to 5002 for the API
+    networks:
+      - tbot-network
+    environment:
+      PYTHONUNBUFFERED: 1
+      IB_GATEWAY_PORT: "${IB_GATEWAY_PORT:-4002}" 
+      IB_GATEWAY_HOST: "${IB_GATEWAY_HOST:-ib-gateway}"
+      DATABASE_PATH: /app/data/pnl_data.db
+      FLASK_APP: pnl_monitor.py  # Run only the PnL monitoring part
+
+  flask-dashboard:
+    container_name: flask-dashboard
+    build:
+      context: ./stable
+      dockerfile: Dockerfile.flask_dashboard
+      args:
+        MONITOR_PNL_GIT_REPO: ${MONITOR_PNL_GIT_REPO:-https://github.com/mporenta/portfolio-monitor.git}
+        MONITOR_PNL_GIT_REPO_BRANCH: "${MONITOR_PNL_GIT_REPO_BRANCH:-main}"
+    depends_on:
+      - pnl-monitor
+    ports:
+      - 5001:5001
+    networks:
+      - tbot-network
+    environment:
+      PYTHONUNBUFFERED: 1
+      PNL_MONITOR_URL: "http://pnl-monitor:5002"
+      PNL_HTTPS_PORT: "${PNL_HTTPS_PORT:-5002}"
+      FLASK_ENV: development
+      FLASK_APP: app.py  # Run only the Flask part
+
+  ngrok-pnl:
+    # ... (keep existing configuration but point to flask-dashboard:5001)
+    command: tunnel --label edge="${NGROK_EDGE_PNL}" flask-dashboard:5001
+
+networks:
+  tbot-network:
+    driver: bridge
+
+volumes:
+  pnl_data:

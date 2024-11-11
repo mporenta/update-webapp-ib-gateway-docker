@@ -82,13 +82,30 @@ services:
       - ngrok-pnl
       - ib-gateway
     ports:
-      - 5001:5001
+      - 5002:5002
     networks:
       - tbot-network
     environment:
       PYTHONUNBUFFERED: 1
       IB_GATEWAY_PORT: "${IB_GATEWAY_PORT:-4002}" 
       IB_GATEWAY_HOST: "${IB_GATEWAY_HOST:-ib-gateway}"
+      DATABASE_PATH: /app/data/pnl_data.db
+
+  flask-dashboard:
+    container_name: flask-dashboard
+    build:
+      context: ./stable
+      dockerfile: Dockerfile.flask_dashboard
+    depends_on:
+      - pnl-monitor
+    ports:
+      - 5001:5001
+    networks:
+      - tbot-network
+    environment:
+      PYTHONUNBUFFERED: 1
+      PNL_MONITOR_URL: "http://pnl-monitor:5002"  # Point to pnl-monitor's new port
+      FLASK_ENV: development
 
 
     
@@ -104,6 +121,7 @@ services:
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTH}
       NGROK_REGION: us
+
 
 networks:
   tbot-network:
