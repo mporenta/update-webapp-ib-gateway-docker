@@ -1,36 +1,26 @@
 # stable/Dockerfile.pnl_monitor
-FROM python:3.9-slim
-
-
+FROM python:3.12-slim
 
 # Install git
 RUN apt-get update && \
     apt-get install -y git && \
     rm -rf /var/lib/apt/lists/*
-# Install netcat for the wait-for-ib.sh script
-RUN apt-get install -y netcat
 
 # Create data directory for SQLite
 RUN mkdir -p /app/data
-# Create a non-root user and set its home directory
-RUN useradd -m tbot
 
-# Set the working directory to the user's home directory
-WORKDIR /home/tbot
-# Copy the shell script into the container
+WORKDIR /app
+
 # Clone the repository
-ARG MONITOR_PNL_GIT_REPO
-ARG MONITOR_PNL_GIT_REPO_BRANCH=main
-RUN git clone -b ${MONITOR_PNL_GIT_REPO_BRANCH} ${MONITOR_PNL_GIT_REPO} .
-WORKDIR /home/tbot/develop/github/portfolio-monitor
-#COPY ./requirements.txt  /home/tbot/develop/github/portfolio-monitor/requirements.txt 
+RUN git clone https://github.com/mporenta/portfolio-monitor.git
 
-
-
-
-
+# Set the working directory to where the repository was actually cloned
+WORKDIR /app/portfolio-monitor
+COPY ./requirements.txt  /app/portfolio-monitor/requirements.txt
+COPY ./requirements.txt  /app/portfolio-monitor/src/pnl_monitor.py
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-WORKDIR /home/tbot/develop/github/portfolio-monitor/src
+
 # Run only the PnL monitoring script
-CMD ["python", "pnl_monitor.py"]
+CMD ["python", "src/pnl_monitor.py"]
+#CMD ["/bin/bash"]

@@ -76,8 +76,8 @@ services:
       context: ./stable
       dockerfile: Dockerfile.pnl_monitor
       args:
-        MONITOR_PNL_GIT_REPO: ${MONITOR_PNL_GIT_REPO:-https://github.com/mporenta/portfolio-monitor.git}
-        MONITOR_PNL_GIT_REPO_BRANCH: "${MONITOR_PNL_GIT_REPO_BRANCH:-main}"
+        MONITOR_PNL_GIT_REPO: https://github.com/mporenta/portfolio-monitor.git
+        MONITOR_PNL_GIT_REPO_BRANCH: main
     depends_on:
       - ngrok-pnl
       - ib-gateway

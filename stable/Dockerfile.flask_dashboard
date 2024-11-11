@@ -1,22 +1,25 @@
-# stable/Dockerfile.flask_dashboard
-FROM python:3.9-slim
-RUN mkdir -p /app
-WORKDIR /app
+# stable/Dockerfile.pnl_monitor
+FROM python:3.12-slim
 
 # Install git
 RUN apt-get update && \
     apt-get install -y git && \
     rm -rf /var/lib/apt/lists/*
 
-# Clone the repository
-ARG MONITOR_PNL_GIT_REPO
-ARG MONITOR_PNL_GIT_REPO_BRANCH=main
-RUN git clone -b ${MONITOR_PNL_GIT_REPO_BRANCH} ${MONITOR_PNL_GIT_REPO} .
-WORKDIR /home/tbot/develop/github/portfolio-monitor
+# Create data directory for SQLite
+RUN mkdir -p /app/data
 
+WORKDIR /app
+
+# Clone the repository
+RUN git clone https://github.com/mporenta/portfolio-monitor.git
+
+# Set the working directory to where the repository was actually cloned
+WORKDIR /app/portfolio-monitor
+COPY ./requirements.txt  /app/portfolio-monitor/requirements.txt
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-WORKDIR /home/tbot/develop/github/portfolio-monitor/src
-
-# Run only the Flask application
-CMD ["python", "app.py"]
+# Run only the PnL monitoring script
+CMD ["python", "src/app.py"]
+#CMD ["/bin/bash"]
