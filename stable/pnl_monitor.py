@@ -17,7 +17,6 @@ from db import is_symbol_eligible_for_close, insert_positions_data, insert_pnl_d
 from app import app as flask_app
 
 load_dotenv()
-log_file_path = os.path.join(os.path.dirname(__file__), 'pnl_monitor.log')
 PORT = int(os.getenv("PNL_HTTPS_PORT", "5002"))
 class IBPortfolioTracker():
     def __init__(self):
@@ -28,7 +27,7 @@ class IBPortfolioTracker():
             self.host = os.getenv('IB_GATEWAY_HOST', 'ib-gateway')  # Use container name as default
             self.port = int(os.getenv('TBOT_IBKR_PORT', '4002'))   # Use existing env var
             self.client_id = int(os.getenv('IB_GATEWAY_CLIENT_ID', '8'))
-          
+            self.logger = logging.getLogger(__name__)
             self.risk_percent = float(os.getenv('RISK_PERCENT', 0.01))
             self.total_realized_pnl = 0.0
             self.total_unrealized_pnl = 0.0
@@ -42,16 +41,15 @@ class IBPortfolioTracker():
             self.trade = None
     
              # Set up logging
+            log_file_path = os.path.join(os.path.dirname(__file__), 'app.log')
             logging.basicConfig(
-                level=logging.debug,
-                format='%(asctime)s - %(levelname)s - %(message)s',
-                handlers=[
-            logging.FileHandler(log_file_path),
-            logging.StreamHandler()  # Optional: to also output logs to the console
-                ]
-            )
-            self.logger = logging.getLogger(__name__)
-            util.logToConsole(level=30)
+               level=logging.DEBUG,
+               format='%(asctime)s - %(levelname)s - %(message)s',
+               handlers=[
+                   logging.FileHandler(log_file_path),
+                    logging.StreamHandler()  # Optional: to also output logs to the console
+               ]
+           )
             try:
                 self.logger.info(f"Connecting to IB Gateway at {self.host}:{self.port} with client ID {self.client_id}")
                 self.ib.connect(
@@ -210,9 +208,9 @@ class IBPortfolioTracker():
         openOrders = self.ib.openOrders()
         for trade in openOrders:
             #insert_order(trade)
-            logger.debug(f"Order inserted/updated for {trade} order type: {trade.orderType}")
+            self.logger.debug(f"Order inserted/updated for {trade} order type: {trade.orderType}")
             self.ib.sleep(2)
-            logger.debug(f"After sleep - Order inserted/updated for {trade} order type: {trade.orderType}")
+            self.logger.debug(f"After sleep - Order inserted/updated for {trade} order type: {trade.orderType}")
             
     
         try:
@@ -303,8 +301,8 @@ class IBPortfolioTracker():
                 return False
         
             self.daily_pnl =  float(pnl.dailyPnL) if pnl.dailyPnL is not None else 0.0
-            #self.risk_amount = net_liq * self.risk_percent
-            self.risk_amount = 30000 * self.risk_percent
+            self.risk_amount = net_liq * self.risk_percent
+            #self.risk_amount = 30000 * self.risk_percent
             
             is_threshold_exceeded = self.daily_pnl <= -self.risk_amount
             self.logger.info(f"Risk threshold is Daily PnL ${self.daily_pnl:,.2f} <= -${self.risk_amount:,.2f}")
@@ -386,7 +384,7 @@ class IBPortfolioTracker():
             orders = self.ib.openOrders()
             for trade in orders:
                 #insert_order(trade)
-                logger.debug(f"on_pnl_update Order inserted/updated for {trade} order type: {trade.orderType}")
+                self.logger.debug(f"on_pnl_update Order inserted/updated for {trade} order type: {trade.orderType}")
                
             #existing_trades = self.ib.trades()
             
@@ -455,17 +453,11 @@ class IBPortfolioTracker():
    
 
 if __name__ == "__main__":
-    logger = logging.getLogger(__name__)
-    logger.debug("Starting IBPortfolioTracker...")
-    try:
-        
-      
+
        
-        portfolio_tracker = IBPortfolioTracker()
-        portfolio_tracker.run()
-        
-        
+    portfolio_tracker = IBPortfolioTracker()
+    portfolio_tracker.run()
+
+
     
-    except Exception as e:
-        logger.error(f"Error in main: {str(e)}")
-        raise  
+   
