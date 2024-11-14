@@ -11,3 +11,4 @@ werkzeug
 dataclasses
 setuptools
 waitress
+tzdata
