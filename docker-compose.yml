@@ -70,28 +70,23 @@ services:
       NGROK_AUTHTOKEN: ${NGROK_AUTH}
       NGROK_REGION: us
 
-
-  flask-dashboard:
-    container_name: flask-dashboard
+  pnl-monitor:
+    container_name: pnl-monitor
     build:
       context: ./stable
       dockerfile: Dockerfile.pnl_monitor
       args:
-        MONITOR_PNL_GIT_REPO: https://github.com/mporenta/portfolio-monitor.git
-        MONITOR_PNL_GIT_REPO_BRANCH: main
+        MONITOR_PNL_GIT_REPO: ${MONITOR_PNL_GIT_REPO:-https://github.com/mporenta/portfolio-monitor.git}
+        MONITOR_PNL_GIT_REPO_BRANCH: "${MONITOR_PNL_GIT_REPO_BRANCH:-main}"
     depends_on:
-      - ib-gateway
       - ngrok-pnl
-
+      - ib-gateway
     ports:
       - 5001:5001
     networks:
       - tbot-network
     environment:
       PYTHONUNBUFFERED: 1
-      PNL_MONITOR_URL: "https://portfolio.porenta.us"  # Point to pnl-monitor's new port
-      FLASK_ENV: development
-      DATABASE_PATH: /app/data/pnl_data.db
       IB_GATEWAY_PORT: "${IB_GATEWAY_PORT:-4002}" 
       IB_GATEWAY_HOST: "${IB_GATEWAY_HOST:-ib-gateway}"
 
@@ -101,7 +96,7 @@ services:
     image: ngrok/ngrok:3.5.0-alpine
     restart: always
     container_name: ngrok-pnl-monitor
-    command: tunnel --label edge="${NGROK_EDGE_PNL}"  flask-dashboard:5001
+    command: tunnel --label edge="${NGROK_EDGE_PNL}" pnl-monitor:5001
     ports:
     - 80:80
     networks:
@@ -109,7 +104,6 @@ services:
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTH}
       NGROK_REGION: us
-
 
 networks:
   tbot-network:
