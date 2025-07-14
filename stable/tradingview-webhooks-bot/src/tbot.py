@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-TradingBoat helper views – FastAPI edition
+TradingBoat helper views – FastAPI edition matching Flask exactly
 """
 import os
 import sqlite3
 from threading import Lock
 from typing import Any, List, Dict
+from contextvars import ContextVar
 
 from dotenv import load_dotenv
 from fastapi import Request
-from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from utils.log import get_logger
@@ -31,15 +31,25 @@ load_dotenv(dotenv_path=ENV_FILE_PATH, override=True)
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
+# Context variable to store request (like Flask's g)
+_request_context: ContextVar[Request | None] = ContextVar('request_context', default=None)
+
+def set_request_context(request: Request):
+    """Set the current request context"""
+    _request_context.set(request)
+
+def get_request():
+    """Get the current request context"""
+    return _request_context.get()
+
 # ────────────────
-# SQLite utilities
+# SQLite utilities - matching Flask exactly
 # ────────────────
 _db_lock: Lock = Lock()
 _database: sqlite3.Connection | None = None
 
-
 def get_db() -> sqlite3.Connection:
-    """Open or reuse a singleton SQLite connection (thread-safe)."""
+    """Get the database - matching Flask g._database pattern"""
     global _database
     with _db_lock:
         if _database is None:
@@ -48,68 +58,71 @@ def get_db() -> sqlite3.Connection:
             _database.row_factory = sqlite3.Row
         return _database
 
-
 def query_db(query: str, args: tuple = ()) -> List[Dict[str, Any]]:
-    """Run SELECT and return list-of-dict rows; swallow & log errors like Flask version."""
+    """Query database - matching Flask version exactly"""
     try:
         cur = get_db().execute(query, args)
         rows = cur.fetchall()
+        unpacked = [{k: item[k] for k in item.keys()} for item in rows]
         cur.close()
-        return [{k: row[k] for k in row.keys()} for row in rows]
-    except Exception as err:  # noqa: BLE001
-        logger.error(f"Failed to execute query: {err}")
+    except Exception as err:
+        logger.error(f"Failed to execute: {err}")
         return []
-
+    return unpacked
 
 # ────────────────
-# View helpers
+# View functions - matching Flask signatures exactly
 # ────────────────
-def get_orders(request: Request):
-    return templates.TemplateResponse(
-        "orders.html", {"request": request, "title": "IBKR Orders"}
-    )
 
+def get_orders():
+    """Get IBKR Orders - matches Flask exactly"""
+    request = get_request()
+    return templates.TemplateResponse("orders.html", {"request": request, "title": "IBKR Orders"})
 
 def get_orders_data():
-    rows = query_db("SELECT * FROM TBOTORDERS")
-    return JSONResponse({"data": rows})
+    """Get IBKR Orders for AJAX - matches Flask exactly"""
+    rows = query_db("select * from TBOTORDERS")
+    return {"data": rows}
 
-
-def get_alerts(request: Request):
+def get_alerts():
+    """Get TradingView alerts - matches Flask exactly"""
+    request = get_request()
     return templates.TemplateResponse(
         "alerts.html", {"request": request, "title": "TradingView Alerts to TBOT"}
     )
 
-
 def get_alerts_data():
-    rows = query_db("SELECT * FROM TBOTALERTS")
-    return JSONResponse({"data": rows})
+    """Get TradingView alerts for AJAX - matches Flask exactly"""
+    rows = query_db("select * from TBOTALERTS")
+    return {"data": rows}
 
-
-def get_errors(request: Request):
+def get_errors():
+    """Get TradingView alerts - matches Flask exactly"""
+    request = get_request()
     return templates.TemplateResponse(
         "error.html", {"request": request, "title": "TradingView Errors to TBOT"}
     )
 
-
 def get_errors_data():
-    rows = query_db("SELECT * FROM TBOTERRORS")
-    return JSONResponse({"data": rows})
+    """Get TradingView errors for AJAX - matches Flask exactly"""
+    rows = query_db("select * from TBOTERRORS")
+    return {"data": rows}
 
-
-def get_tbot(request: Request):
+def get_tbot():
+    """Get the holistic view of Tbot - matches Flask exactly"""
+    request = get_request()
     return templates.TemplateResponse(
         "alerts_orders.html",
-        {"request": request, "title": "TradingView Alerts and IBKR Orders on TBOT"},
+        {"request": request, "title": " TradingView Alerts and IBKR Orders on TBOT"},
     )
 
-
 def get_ngrok():
+    """Get NGROK Address - matches Flask exactly"""
     addr = os.environ.get("TBOT_NGROK", "#")
-    return JSONResponse({"data": {"address": addr}})
-
+    return {"data": {"address": addr}}
 
 def get_tbot_data():
+    """Get inner join between TBOTORDERS and TBOTALERTS - matches Flask exactly"""
     query = (
         "SELECT "
         "TBOTORDERS.timestamp, "
@@ -131,28 +144,24 @@ def get_tbot_data():
         "ORDER BY TBOTORDERS.uniquekey DESC "
     )
     rows = query_db(query)
-    return JSONResponse({"data": rows})
+    return {"data": rows}
 
+def get_main():
+    """Get entry point for TradingBoat - matches Flask exactly"""
+    request = get_request()
+    if request and request.method == "GET":
+        # Make the open-gui mode in favor of the system-level firewall.
+        try:
+            os.remove(".gui_key")
+        except FileNotFoundError:
+            pass
 
-def get_main(request: Request):
-    """
-    Entry point – identical semantics to Flask version:
-    • On GET, delete .gui_key file (open-GUI mode)
-    • Render tbot_dashboard.html
-    """
-    # Make the open-gui mode in favour of the system-level firewall.
-    try:
-        os.remove(".gui_key")
-    except FileNotFoundError:
-        pass
+        return templates.TemplateResponse("tbot_dashboard.html", {"request": request})
 
-    return templates.TemplateResponse("tbot_dashboard.html", {"request": request})
-
-
-# called from lifespan in app_fastapi.py
-def close_connection(_: object | None = None):
+def close_connection(exception):
+    """Close connection - matches Flask exactly"""
     global _database
-    if _database is not None:
-        _database.close()
-        _database = None
- 
+    with _db_lock:
+        if _database is not None:
+            _database.close()
+            _database = None

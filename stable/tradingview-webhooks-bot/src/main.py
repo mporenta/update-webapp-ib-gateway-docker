@@ -1,4 +1,4 @@
-# app_fastapi.py
+# main.py
 import os
 import uvicorn
 import logging
@@ -72,30 +72,34 @@ app.add_middleware(
 )
 
 # ───── routes mapped to existing tbot views ───────────────────────────────────
+# ───── routes mapped to existing tbot views ───────────────────────────────────
+# These should match exactly with Flask app.add_url_rule() calls
+
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    # delegate completely to helper
-    return tbot.get_main(request)
+def home():
+    return tbot.get_main()
 
 @app.get("/orders", response_class=HTMLResponse)
-def orders(request: Request):
-    return tbot.get_orders(request)
+def orders():
+    return tbot.get_orders()
 
 @app.get("/alerts", response_class=HTMLResponse)
-def alerts(request: Request):
-    return tbot.get_alerts(request)
+def alerts():
+    return tbot.get_alerts()
 
-
+@app.get("/ngrok", response_class=HTMLResponse)
+def ngrok():
+    return tbot.get_ngrok()
 
 @app.get("/errors", response_class=HTMLResponse)
-def errors(request: Request):
-    return tbot.get_errors(request)
+def errors():
+    return tbot.get_errors()
 
 @app.get("/tbot", response_class=HTMLResponse)
-def tbot_page(request: Request):
-    return tbot.get_tbot(request)
+def tbot_page():
+    return tbot.get_tbot()
 
-# data endpoints (JSON) stay unchanged
+# data endpoints (JSON)
 @app.get("/orders/data")
 def orders_data():
     return tbot.get_orders_data()
@@ -103,9 +107,11 @@ def orders_data():
 @app.get("/alerts/data")
 def alerts_data():
     return tbot.get_alerts_data()
+
 @app.get("/errors/data")
 def errors_data():
     return tbot.get_errors_data()
+
 @app.get("/tbot/data")
 def tbot_data():
     return tbot.get_tbot_data()
