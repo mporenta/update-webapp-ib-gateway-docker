@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>PnL Dashboard</title>
+
+    <!-- jQuery and jQuery UI -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+
+    <!-- DataTables CSS/JS -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.css">
+    <link rel="stylesheet" type="text/css"
+        href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.dataTables.min.css">
+    <script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.js"></script>
+    <script type="text/javascript"
+        src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+
+    <!-- Moment.js Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.43/moment-timezone-with-data.min.js"></script>
+
+    <link rel="stylesheet" href="/static/css/style.css">
+
+</head>
+
+<body class="bg-gray-900 text-gray-200">
+    <header class="bg-gray-800 text-gray-100 p-4 flex items-center sticky top-0 z-50 shadow-lg">
+        <h1 class="text-2xl font-bold">Trading Dashboard</h1>
+        <div class="flex items-center gap-6 ml-auto">
+            <ul class="nav-pills">
+
+            </ul>
+            <div class="flex items-center">
+                <input type="checkbox" id="autoRefresh" class="mr-2">
+                <label for="autoRefresh">Auto-refresh (30s)</label>
+            </div>
+            <button id="refreshBtn"
+                class="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors flex items-center gap-2">
+                <span>Refresh Data</span>
+                <span id="refreshSpinner" class="spinner hidden"></span>
+            </button>
+        </div>
+    </header>
+
+    <section class="max-w-6xl mx-auto mt-6 p-4 bg-gray-800 rounded-lg shadow">
+        <h2 class="text-xl font-semibold mb-4 text-gray-100">BT Ticker Tradingview</h2>
+        <div id="pnl-metrics" class="grid grid-cols-5 gap-5">
+
+            <!-- BT Ticker Input -->
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <label for="ticker-search-bt" class="text-sm font-medium text-gray-300">Stock
+                        Ticker</label>
+                    <div class="flex items-center" id="ticker-status-container-bt">
+                        <!-- Status badge inserted via JS -->
+                    </div>
+                </div>
+                <input id="ticker-search-bt" type="text" placeholder="Enter symbol..."
+                    class="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ui-autocomplete-input"
+                    style="text-transform: uppercase;" required autocomplete="off">
+            </div>
+            <!-- Buttons -->
+            <div class="flex gap-4">
+                <button type="button" id="get-ticker-data-button"
+                    class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">Get Data</button>
+                <button type="button" id="unsubscribe-button"
+                    class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors">Unsubscribe</button>
+            </div>
+        </div>
+    </section>
+        <section class="max-w-6xl mx-auto mt-6 p-4 bg-gray-800 rounded-lg shadow">
+            <div class="flex justify-between items-center mb-4">
+            </div>
+        </section>
+        <div class="max-w-5xl mx-auto">
+            <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <!-- Header -->
+                <div class="bg-gray-700 p-4 border-b border-gray-600 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                        <polyline points="16 7 22 7 22 13"></polyline>
+                    </svg>
+                    <h4 class="text-xl font-semibold text-white">Stock Order Entry</h4>
+                </div>
+
+
+
+
+            </div>
+
+            <!-- NEW: TradingView Widget -->
+            <section class="max-w-6xl mx-auto mt-6 p-4 bg-gray-800 rounded-lg shadow">
+
+                <!-- TradingView Widget BEGIN -->
+                <div class="tradingview-widget-container">
+                    <div class="tradingview-widget-container__widget"></div>
+                    <div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/"
+                            rel="noopener nofollow" target="_blank"><span class="blue-text">Track all markets on
+                                TradingView</span></a></div>
+                    <script>
+                        function updateTradingViewWidget() {
+                            // Get stored values with defaults
+                            const tvSymbol = sessionStorage.getItem('tv_symbol') || 'AAPL';
+                            const tvExchange = sessionStorage.getItem('tv_exchange') || 'NASDAQ';
+                            const symbol = `${tvExchange}:${tvSymbol}`;
+
+                            // Select the tradingview widget container
+                            const container = document.querySelector('.tradingview-widget-container');
+                            if (!container) return;
+
+                            // Remove any old widget script (inserted dynamically)
+                            const oldScript = container.querySelector('script[data-widget]');
+                            if (oldScript) {
+                                oldScript.remove();
+                            }
+
+                            // Create a new script element with the updated config
+                            const script = document.createElement('script');
+                            script.type = 'text/javascript';
+                            script.async = true;
+                            script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+                            script.setAttribute('data-widget', 'true');
+                            // Configure the widget with the new symbol
+                            script.innerHTML = JSON.stringify({
+                                width: "980",
+                                height: "610",
+                                symbol: symbol,
+                                interval: "1",
+                                timezone: "America/New_York",
+                                theme: "dark",
+                                style: "1",
+                                locale: "en",
+                                allow_symbol_change: true,
+                                backgroundColor: "rgba(66, 66, 66, 1)",
+                                studies: ["STD; EMA"],
+                                support_host: "https://www.tradingview.com"
+                            });
+                            container.appendChild(script);
+                        }
+                    </script>
+
+                </div>
+                <!-- TradingView Widget END -->
+            </section>
+            <section class="max-w-6xl mx-auto mt-6 p-4 bg-gray-800 rounded-lg shadow">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-gray-100">
+                        <span id="volatility-scan-title">Market Volatility Matches</span>
+                        <span id="scan-ticker-symbol" class="ml-2 text-blue-400"></span>
+                    </h2>
+                    <div class="flex items-center gap-3">
+                        <span id="scan-info" class="text-sm text-gray-400"></span>
+                        <button id="scan-refresh-btn"
+                            class="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors">
+                            Refresh Scan
+                        </button>
+                    </div>
+                </div>
+
+
+                <div id="scan-summary" class="mb-4 text-sm text-gray-300"></div>
+                <table id="volatility-matches-table" class="w-full"></table>
+            </section>
+
+            <!-- Notification Toast -->
+            <div id="notification" class="success">
+                <span class="notification-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </span>
+                <span id="notification-message">Notification message</span>
+            </div>
+
+
+
+
+
+    </section>
+
+    <!-- Scripts -->
+    <script>
+
+        // Debug logging function to help troubleshoot
+        function logDebug(message, data) {
+            console.log(`🔍 DEBUG: ${message}`, data);
+        }
+
+        // Ensure DataTables is properly loaded
+        function checkDataTablesLoaded() {
+            if (typeof $.fn.DataTable !== 'function') {
+                console.error('DataTables library not loaded! Make sure jQuery and DataTables are included.');
+                return false;
+            }
+            return true;
+        }
+
+        // Initialize the volatility matches table with robust error handling
+        function initVolatilityMatchesTable() {
+            logDebug('Initializing volatility table');
+
+            try {
+                // Make sure DataTables is loaded
+                if (!checkDataTablesLoaded()) return;
+
+                // Check if the table element exists
+                const tableElement = $('#volatility-matches-table');
+                if (tableElement.length === 0) {
+                    console.error('Table element #volatility-matches-table not found in the DOM');
+                    return;
+                }
+
+                // Check if DataTable is already initialized on this element
+                if ($.fn.DataTable.isDataTable('#volatility-matches-table')) {
+                    logDebug('DataTable already initialized, destroying previous instance');
+                    tableElement.DataTable().destroy();
+                }
+
+                // Initialize DataTable with clear configuration
+                volatilityMatchesTable = tableElement.DataTable({
+                    columns: [
+                        { data: 'datetime', title: 'Time', width: '20%' },
+                        { data: 'open', title: 'Open Price', render: d => formatCurrencyBt(d), width: '20%' },
+                        { data: 'close', title: 'Close Price', render: d => formatCurrencyBt(d), width: '20%' },
+                        { 
+                          data: 'volume', 
+                          title: 'Volume', 
+                          render: function(data) {
+                            if (data === null || data === undefined) return '-';
+                            
+                            // Round to nearest whole number
+                            const value = Math.round(data);
+                            
+                            // Format with K for thousands and M for millions
+                            if (value >= 1000000) {
+                              return Math.round(value / 1000000) + 'M';
+                            } else if (value >= 1000) {
+                              return Math.round(value / 1000) + 'K';
+                            } else {
+                              return value.toString();
+                            }
+                          }, 
+                          width: '20%' 
+                        },
+                        {
+                            data: 'change_pct',
+                            title: 'Change %',
+                            render: function (data) {
+                                const formatted = formatNumberBt(data) + '%';
+                                const colorClass = data > 0 ? 'text-green-400' : data < 0 ? 'text-red-400' : 'text-gray-300';
+                                return `<span class="${colorClass} font-bold">${formatted}</span>`;
+                            },
+                            width: '20%'
+                        },
+                        {
+                            data: null,
+                            title: 'Price Move',
+                            render: function (data) {
+                                // Calculate price difference
+                                const diff = data.close - data.open;
+                                const formatted = formatCurrencyBt(Math.abs(diff));
+                                const colorClass = diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-gray-300';
+                                const direction = diff > 0 ? '↑' : diff < 0 ? '↓' : '-';
+                                return `<span class="${colorClass} font-bold">${direction} ${formatted}</span>`;
+                            },
+                            width: '20%'
+                        }
+                    ],
+                    order: [[0, 'desc']],  // Sort by datetime in descending order (newest first)
+                    pageLength: 10,
+                    responsive: true,
+                    language: {
+                        search: "Filter matches:",
+                        emptyTable: "No volatility matches found",
+                        zeroRecords: "No matches found - try another symbol",
+                        info: "Showing _START_ to _END_ of _TOTAL_ matches",
+                        infoEmpty: "No matches to show",
+                        paginate: {
+                            first: "First",
+                            last: "Last",
+                            next: "Next",
+                            previous: "Prev"
+                        }
+                    },
+                    dom: '<"flex flex-col sm:flex-row justify-between items-center"<"flex-1"l><"flex-1 text-right"f>>rtip',
+                    initComplete: function () {
+                        $(this.api().table().container()).addClass('dark-theme');
+                        logDebug('DataTable initialization complete');
+                    }
+                });
+
+                logDebug('DataTable initialization successful');
+                return volatilityMatchesTable;
+            } catch (error) {
+                console.error('Error initializing DataTable:', error);
+                // Create a basic table as fallback
+                $('#volatility-matches-table').html(`
+        <tr><th>Time</th><th>Open Price</th><th>Close Price</th><th>Change %</th><th>Price Move</th></tr>
+        <tr><td colspan="5">Error loading table: ${error.message}</td></tr>
+      `);
+            }
+        }
+        // Utility formatting functions.
+        const formatCurrencyBt = (value) => {
+            if (value === null || value === undefined) return '-';
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(value);
+        };
+
+        const formatNumberBt = (value) => {
+            if (value === null || value === undefined) return '-';
+            return new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(value);
+        };
+        // Enhanced version of getTickerData to update the table
+        async function getTickerData() {
+            const ticker = $("#ticker-search-bt").val().trim().toUpperCase();
+            if (!ticker) {
+                showNotificationBt('error', 'Please enter a ticker symbol before subscribing.');
+                return;
+            }
+
+            try {
+                // Update UI to show loading state
+                $('#scan-ticker-symbol').text(ticker);
+                $('#scan-info').text('Loading data...');
+                $('#scan-refresh-btn').prop('disabled', true).html('<span class="spinner"></span>');
+
+                // Fetch volatility data
+                logDebug(`Fetching data for ticker: ${ticker}`);
+                const response_tvscan_ib = await fetch("/tvscan_ib", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ticker: ticker })
+                });
+
+                const result_tvscan_ib = await response_tvscan_ib.json();
+                logDebug('API response received:', result_tvscan_ib);
+                const response_contract = await fetch("/get_contracts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ticker: ticker })
+                });
+                const result_contract = await response_contract.json();
+                console.log('result_contract', result_contract);
+                // Update TradingView widget
+                try {
+                    // Store the symbol and exchange in sessionStorage
+                    sessionStorage.setItem('tv_symbol', result_contract.symbol);
+                    sessionStorage.setItem('tv_exchange', result_contract.exchange); // Default to NASDAQ if unknown
+                    updateTradingViewWidget();
+                } catch (widgetError) {
+                    console.error('Error updating TradingView widget:', widgetError);
+                }
+
+                // Handle error response for volatility data
+                if (result_tvscan_ib.error) {
+                    showNotificationBt('error', `Error: ${result_tvscan_ib.error}`);
+                    $('#scan-info').text('Failed to load data');
+                    return;
+                }
+
+                // Ensure table is initialized
+                if (!$.fn.DataTable.isDataTable('#volatility-matches-table')) {
+                    initVolatilityMatchesTable();
+                }
+
+                // Get a reference to the existing DataTable
+                const table = $('#volatility-matches-table').DataTable();
+
+                // Clear the table and add new data
+                logDebug(`Updating table with ${result_tvscan_ib.matches?.length || 0} matches`);
+                table.clear();
+
+                if (result_tvscan_ib.matches && result_tvscan_ib.matches.length > 0) {
+                    table.rows.add(result_tvscan_ib.matches);
+                }
+
+                table.draw();
+
+                // Update scan summary information
+                const scanSummary = `Analyzed ${result_tvscan_ib.data_points || 0} data points from ${result_tvscan_ib.time_range?.start || 'N/A'} to ${result_tvscan_ib.time_range?.end || 'N/A'} | Found ${result_tvscan_ib.matches_found || 0} volatility matches`;
+                $('#scan-summary').text(scanSummary);
+
+                // Update info text
+                $('#scan-info').text(`${result_tvscan_ib.bar_size} bars`);
+
+                // Show success notification
+                showNotificationBt('success', `Found ${result_tvscan_ib.matches_found || 0} volatility matches for ${ticker}`);
+
+                // Update status badge
+                $('#ticker-status-container-bt').html('<span class="text-xs bg-blue-500 text-white px-2 py-1 rounded-full mr-2">Subscribed</span>');
+
+            } catch (error) {
+                console.error("Error getting ticker data:", error);
+                showNotificationBt('error', `Failed to load volatility data: ${error.message}`);
+                $('#scan-info').text('Error loading data');
+            } finally {
+                // Reset button state
+                $('#scan-refresh-btn').prop('disabled', false).text('Refresh Scan');
+            }
+        }
+
+        // Make sure notification function exists
+        function showNotificationBt(type, message) {
+            console.log(`${type.toUpperCase()}: ${message}`);
+
+            // Add simple notification if the notification element doesn't exist
+            if ($('#notification').length === 0) {
+                $('body').append(`
+        <div id="notification" class="${type}" style="position:fixed; bottom:20px; right:20px; padding:10px 20px; 
+          background:${type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#3B82F6'}; 
+          color:white; border-radius:4px; z-index:9999; opacity:0; transition:opacity 0.3s;">
+          ${message}
+        </div>
+      `);
+                $('#notification').css('opacity', '1');
+                setTimeout(() => $('#notification').css('opacity', '0'), 3000);
+            } else {
+                // Use existing notification element
+                const notification = $('#notification');
+                notification.removeClass('success error info').addClass(type);
+                $('#notification-message').text(message);
+                notification.addClass('show');
+
+                // Hide notification after 3 seconds
+                setTimeout(() => {
+                    notification.removeClass('show');
+                }, 3000);
+            }
+        }
+
+        // Initialize everything when document is ready
+        $(document).ready(function () {
+            logDebug('Document ready, initializing components');
+
+            // Initialize the volatility matches table
+            initVolatilityMatchesTable();
+
+            // Make sure scan refresh button is wired up
+            $('#scan-refresh-btn').off('click').on('click', function () {
+                logDebug('Refresh scan button clicked');
+                getTickerData();
+            });
+
+            // Make sure get ticker data button is wired up
+            $('#get-ticker-data-button').off('click').on('click', function () {
+                logDebug('Get ticker data button clicked');
+                getTickerData();
+            });
+
+            // Initialize with default values if present
+            const defaultSymbol = sessionStorage.getItem('tv_symbol');
+            if (defaultSymbol) {
+                logDebug(`Initializing with default symbol: ${defaultSymbol}`);
+                $('#ticker-search-bt').val(defaultSymbol);
+                // Optional: auto-fetch data for the default symbol
+                // getTickerData();
+            }
+
+            logDebug('Initialization complete');
+        });
+
+    </script>
+
+
+
+</body>
+
+</html>

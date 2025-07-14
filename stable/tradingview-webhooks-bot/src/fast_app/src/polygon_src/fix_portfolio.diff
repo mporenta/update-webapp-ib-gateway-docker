@@ -1,0 +1,36 @@
+--- a/pre_vol_wsh.py
++++ b/pre_vol_wsh.py
+@@ -200,11 +200,11 @@ async def process_csv(self, file_path: str, rvolFactor: float, wshEvents=False):
+             if passed_earnings:
+                 out_path = os.path.join(
+                     os.path.dirname(file_path),
+                     "earnings_pre_market_filtered_tickers.txt"
+                 )
+-                with open(out_path, "w") as f:
+-                    f.write(",".join(f"{row['Exchange']}:{sym}" 
+-                                        for sym in passed_earnings 
+-                                        for _, row in [df[df["Symbol"] == sym].iloc[0:1].iterrows()])
+-                )
++                with open(out_path, "w") as f:
++                    f.write(",".join(
++                        f"{row['Exchange']}:{sym}"
++                        for sym in passed_earnings
++                        for _, row in df[df["Symbol"] == sym].iloc[0:1].iterrows()
++                    ))
+ 
+             if passed_non_earnings:
+                 out_path = os.path.join(
+                     os.path.dirname(file_path),
+                     "pre_market_filtered_tickers.txt"
+                 )
+-                with open(out_path, "w") as f:
+-                    f.write(",".join(f"{row['Exchange']}:{sym}"
+-                                        for sym in passed_non_earnings
+-                                        for _, row in [df[df["Symbol"] == sym].iloc[0:1].iterrows()])
+-                )
++                with open(out_path, "w") as f:
++                    f.write(",".join(
++                        f"{row['Exchange']}:{sym}"
++                        for sym in passed_non_earnings
++                        for _, row in df[df["Symbol"] == sym].iloc[0:1].iterrows()
++                    ))
