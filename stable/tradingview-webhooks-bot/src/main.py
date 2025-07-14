@@ -72,34 +72,38 @@ app.add_middleware(
 )
 
 # ───── routes mapped to existing tbot views ───────────────────────────────────
-# ───── routes mapped to existing tbot views ───────────────────────────────────
 # These should match exactly with Flask app.add_url_rule() calls
 
 @app.get("/", response_class=HTMLResponse)
-def home():
+def home(request: Request):
+    tbot.set_request_context(request)
     return tbot.get_main()
 
 @app.get("/orders", response_class=HTMLResponse)
-def orders():
+def orders(request: Request):
+    tbot.set_request_context(request)
     return tbot.get_orders()
 
 @app.get("/alerts", response_class=HTMLResponse)
-def alerts():
+def alerts(request: Request):
+    tbot.set_request_context(request)
     return tbot.get_alerts()
 
-@app.get("/ngrok", response_class=HTMLResponse)
+@app.get("/ngrok")
 def ngrok():
     return tbot.get_ngrok()
 
 @app.get("/errors", response_class=HTMLResponse)
-def errors():
+def errors(request: Request):
+    tbot.set_request_context(request)
     return tbot.get_errors()
 
 @app.get("/tbot", response_class=HTMLResponse)
-def tbot_page():
+def tbot_page(request: Request):
+    tbot.set_request_context(request)
     return tbot.get_tbot()
 
-# data endpoints (JSON)
+# data endpoints (JSON) - no request context needed
 @app.get("/orders/data")
 def orders_data():
     return tbot.get_orders_data()
@@ -115,7 +119,6 @@ def errors_data():
 @app.get("/tbot/data")
 def tbot_data():
     return tbot.get_tbot_data()
-
 
 
 # ───── custom endpoints previously in Flask ───────────────────────────────────
