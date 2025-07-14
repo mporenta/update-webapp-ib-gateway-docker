@@ -6,11 +6,11 @@
 # production image and consume unnecessary space.
 #
 
-FROM ubuntu:22.04 as setup
+FROM ubuntu:22.04 AS setup
 
-ENV IB_GATEWAY_VERSION=10.20.1i
+ENV IB_GATEWAY_VERSION=10.38.1c
 ENV IB_GATEWAY_RELEASE_CHANNEL=latest
-ENV IBC_VERSION=3.15.2
+ENV IBC_VERSION=3.23.0
 
 # Prepare system
 RUN apt-get update -y
@@ -73,11 +73,12 @@ RUN chmod a+x /root/scripts/*.sh
 COPY --from=setup /usr/local/i4j_jres/ /usr/local/i4j_jres
 
 # IBC env vars
-ENV TWS_MAJOR_VRSN ${IB_GATEWAY_VERSION}
-ENV TWS_PATH /root/Jts
-ENV IBC_PATH /root/ibc
-ENV IBC_INI /root/ibc/config.ini
-ENV TWOFA_TIMEOUT_ACTION exit
+
+ENV TWS_MAJOR_VRSN=${IB_GATEWAY_VERSION}
+ENV TWS_PATH=/root/Jts/ibgateway/${IB_GATEWAY_VERSION}
+ENV IBC_PATH=/root/ibc
+ENV IBC_INI=/root/ibc/config.ini
+ENV TWOFA_TIMEOUT_ACTION=exit
 
 # Start run script
 CMD ["/root/scripts/run.sh"]

@@ -1,4 +1,4 @@
-version: "3.4"
+
 
 services:
   ib-gateway:
@@ -25,7 +25,7 @@ services:
       TBOT_USES_REDIS_STREAM: ${TBOT_USES_REDIS_STREAM:-False}
       TBOT_REDIS_READ_TIMEOUT_MS: ${TBOT_REDIS_READ_TIMEOUT_MS:-10}
       TBOT_IBKR_PORT: ${TBOT_IBKR_PORT:-4001}
-      TBOT_IBKR_CLIENTID: ${TBOT_IBKR_CLIENTID:-1}
+      TBOT_IBKR_CLIENTID: ${TBOT_IBKR_CLIENTID:-1111}
       TBOT_IBKR_IPADDR: ${TBOT_IBKR_IPADDR:-127.0.0.1}
       TBOT_DB_HOME: ${TBOT_DB_HOME:-}
       TBOT_DB_OFFICE: ${TBOT_DB_OFFICE:-}
@@ -34,14 +34,19 @@ services:
       TBOT_TELEGRAM_CHAT_ID: ${TBOT_TELEGRAM_CHAT_ID:-}
       TBOT_NGROK: ${TBOT_NGROK:-}
       TBOT_PROFILER: ${TBOT_PROFILER:-False}
+      FAST_API_HOST: ${FAST_API_HOST:-0.0.0.0}
+      FAST_API_PORT: ${FAST_API_PORT:-5000}
+      FAST_API_CLIENT_ID: ${FAST_API_CLIENT_ID:-1111}
     ports:
       - "127.0.0.1:4001:4001"
       - "127.0.0.1:4002:4002"
       - "0.0.0.0:5900:5900"
       - "0.0.0.0:5000:5000"
+      
+    
     depends_on:
       - redis
-      - ngrok
+ 
 
   redis:
     image: redis:7.0.10-alpine
@@ -49,17 +54,5 @@ services:
     container_name: redis-on-tradingboat
     ports:
       - "0.0.0.0:6379:6379"
+    
 
-  ngrok:
-    image: ngrok/ngrok:3.19.1-alpine
-    restart: always
-    container_name: ngrok-on-tradingboat
-    command:
-      - http
-      - "${NGROK_PORT}"
-    ports:
-      - "4040:4040"
-    environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTH}
-      NGROK_REGION: us
-      NGROK_PORT: ${NGROK_PORT:-}
