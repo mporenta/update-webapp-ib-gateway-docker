@@ -128,7 +128,7 @@ class VolatilityStopData:
         """
         Get the current values as a tuple (vStop, uptrend)
         """
-        return (self.atr, self.atrFactor)
+        return (self.atr, self.vstopAtrFactor)
 
 
 class SeriesAccessor:

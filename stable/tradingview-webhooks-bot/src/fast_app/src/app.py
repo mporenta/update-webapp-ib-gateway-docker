@@ -11,7 +11,8 @@ from threading import Lock
 from datetime import datetime
 
 from fastapi import FastAPI, Depends, HTTPException, Request, BackgroundTasks, Security, Query
-from fastapi.security.api_key import APIKeyHeader, APIKey
+from fastapi.security.api_key import APIKeyHeader
+from fastapi.openapi.models import APIKey
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles

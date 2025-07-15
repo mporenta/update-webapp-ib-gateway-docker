@@ -37,6 +37,7 @@ services:
       FAST_API_HOST: ${FAST_API_HOST:-0.0.0.0}
       FAST_API_PORT: ${FAST_API_PORT:-5000}
       FAST_API_CLIENT_ID: ${FAST_API_CLIENT_ID:-1111}
+      POLYGON_API_KEY: ${POLYGON_API_KEY:-}
     ports:
       - "127.0.0.1:4001:4001"
       - "127.0.0.1:4002:4002"

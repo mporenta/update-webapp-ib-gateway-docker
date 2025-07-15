@@ -108,7 +108,7 @@ async def ema_check(contract: Contract, ib: IB=None, barSizeSetting=None) -> str
     except Exception as e:
         logger.error(f"Error in ema_check for {contract.symbol}: {e}")
         return None
-async def ib_data(contract: Contract, ib: IB = None, barSizeSetting=None, durationStr_min = None) -> Any:
+async def ib_data(contract: Contract, ib: IB = None, barSizeSetting=None, durationStr_min = None) -> dict:
     """
     Pull daily + 1-min history, enrich with TA-Lib indicators, and return JSON-ready dict.
     """

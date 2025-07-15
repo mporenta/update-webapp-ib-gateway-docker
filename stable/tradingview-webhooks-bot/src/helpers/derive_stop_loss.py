@@ -8,7 +8,7 @@ from bar_size import convert_pine_timeframe_to_barsize
 from models import OrderRequest, PriceSnapshot, VolatilityStopData
 from typing import Any, Dict, Optional, ClassVar, FrozenSet, List, Tuple
 from log_config import log_config, logger
-from ib_async import IB, Contract, util
+from ib_async import *
 from ib_async.objects import  BarDataList, RealTimeBarList, RealTimeBar
 from ib_async.order import Trade, OrderStatus
 from ib_async.util import isNan
@@ -75,7 +75,14 @@ class VolatilityCalc:
             # these are already native float/bool
             return data.vStop, data.uptrend, data.atr, data.vstopAtrFactor
 
-    
+    async def all(self) -> Dict[str, Tuple[float, bool]]:
+        async with self._lock:
+            # return only native values
+            return {
+                symbol: (d.vStop, d.uptrend)
+                for symbol, d in self._data.items()
+            }
+
 # instantiate
 volatility_stop_calc = VolatilityCalc()
 
@@ -98,7 +105,7 @@ async def get_dynamic_atr(symbol: str, BASE_ATR=None, vol=None) -> float:
         return 2.5
     else:
         return 3.0
-async def derive_stop_loss(req: OrderRequest, contract: Contract, barSizeSetting: str, snapshot: PriceSnapshot, ib: IB = None) -> Any:
+async def derive_stop_loss(req: OrderRequest, contract: Contract, barSizeSetting: str, snapshot: PriceSnapshot, ib: IB = None) -> Tuple[Optional[float], Optional[bool]]:
  
     try:
         symbol = contract.symbol
@@ -159,7 +166,7 @@ async def derive_stop_loss(req: OrderRequest, contract: Contract, barSizeSetting
             )
             if not bars:
                 logger.warning(f"No IB history for {contract.symbol}")
-                return 
+                return None
             
             df = util.df(bars)
             if df.empty:

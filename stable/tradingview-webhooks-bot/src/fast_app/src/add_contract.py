@@ -6,14 +6,14 @@ import os
 load_dotenv()
 boof = os.getenv("HELLO_MSG")
 api_key = os.getenv("POLYGON_API_KEY")
-from typing import *
+from typing import Optional, Union
 poly_client = RESTClient(api_key)
 
 import asyncio
 from datetime import datetime, timedelta, timezone  
-from math import *
+
 from ib_async.util import isNan
-from ib_async import *
+from ib_async import IB, Contract,Ticker
 
 from tech_a import _aggs_to_df
 from models import (
@@ -171,12 +171,12 @@ async def _front_load_rt_bars(symbol: str, contract: Contract, ib: IB, n: int = 
 # add_new_contract – patched so that a brand‑new subscription automatically gets
 # at least 100 historic 5‑second bars seeded into the in‑memory store.
 # ------------------------------------------------------------------------------
-async def add_new_contract(symbol, barSizeSetting: str, ib=None) -> PriceSnapshot:
+async def add_new_contract(symbol, barSizeSetting: str, ib=None) -> Contract:
     try:
         vol = await daily_volatility.get(symbol)
         logger.info(f"add_new_contract: {symbol} barSizeSetting: {barSizeSetting} vol: {vol} : ")
 
-        contract: Contract | None = None
+        contract = None
         if barSizeSetting is None:
             barSizeSetting = None
 
@@ -224,7 +224,7 @@ async def add_new_contract(symbol, barSizeSetting: str, ib=None) -> PriceSnapsho
         logger.error(f"Error in add_new_contract for {symbol}: {e}")
         raise
 
-async def add_new_contract_old(symbol, barSizeSetting: str, ib=None) -> PriceSnapshot:
+async def add_new_contract_old(symbol, barSizeSetting: str, ib=None) -> Contract:
     try:
         vol=await daily_volatility.get(symbol)
         logger.info(f"add_new_contract: {symbol} barSizeSetting: {barSizeSetting} vol: {vol} : ")

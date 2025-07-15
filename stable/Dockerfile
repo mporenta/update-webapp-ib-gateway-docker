@@ -146,7 +146,7 @@ RUN python3.11 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN . /opt/venv/bin/activate
 
-
+COPY squeeze_pro.py /opt/venv/lib/python3.11/site-packages/pandas_ta/momentum/squeeze_pro.py
 
 # After copying in tbot-tradingboat:
 COPY ./tbot-tradingboat /home/tbot/develop/github/tbot-tradingboat

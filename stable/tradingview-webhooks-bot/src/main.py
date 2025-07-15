@@ -2,7 +2,7 @@
 # app.py	
 from collections import defaultdict, deque
 
-from typing import *
+from typing import Dict
 import os, asyncio
 from dotenv import load_dotenv
 import threading
@@ -11,7 +11,7 @@ from threading import Lock
 from datetime import datetime
 
 from fastapi import FastAPI, Depends, HTTPException, Request, BackgroundTasks, Security, Query
-from fastapi.security.api_key import APIKeyHeader, APIKey
+from fastapi.security.api_key import APIKeyHeader
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,7 +22,7 @@ from matplotlib.pyplot import bar
 import uvicorn
 from fast_app.src.polygon_src.main_wsh_rvol import start_rvol
 from ib_async.util import isNan
-from ib_async import *
+from ib_insync import IB, Contract, MarketOrder, LimitOrder, StopOrder, Order, PnL
 
 
 
@@ -48,22 +48,22 @@ from fast_app.src.ticker_list import ticker_manager
 from fast_app.src.check_orders import  process_web_order_check, ck_bk_ib
 from fast_app.src.bar_size import convert_pine_timeframe_to_barsize
 from fast_app.src.stop_order import stop_loss_order, market_stop_loss_order, market_bracket_order, limit_bracket_order
-from tech_a import gpt_data_poly, get_ib_pivots, ema_check
-from my_util import  clean_nan, ticker_to_dict,  is_market_hours, delete_orders_db, format_order_details_table
-from ib_db import order_db
-from fill_data import fill_data
+from fast_app.src.tech_a import gpt_data_poly, get_ib_pivots, ema_check
+from fast_app.src.my_util import  clean_nan, ticker_to_dict,  is_market_hours, delete_orders_db, format_order_details_table
+from fast_app.src.ib_db import order_db
+from fast_app.src.fill_data import fill_data
 
 #################################
 # New Imports
-from helpers.resolve_contract import resolve_contract, add_new_contract
-from helpers.choose_action import choose_action
-from helpers.derive_stop_loss import derive_stop_loss
-from helpers.risk import compute_risk_position_size
-from helpers.ib_stop_order import ib_stop_order, new_trade_update_asyncio
-from helpers.zapier import zapier_relay
-from gpt.gpt import gpt_data
+from fast_app.src.helpers.resolve_contract import resolve_contract, add_new_contract
+from fast_app.src.helpers.choose_action import choose_action
+from fast_app.src.helpers.derive_stop_loss import derive_stop_loss
+from fast_app.src.helpers.risk import compute_risk_position_size
+from fast_app.src.helpers.ib_stop_order import ib_stop_order, new_trade_update_asyncio
+from fast_app.src.helpers.zapier import zapier_relay
+from fast_app.src.gpt.gpt import gpt_data
 ####################################
-from ib_bracket import  bk_ib
+from fast_app.src.ib_bracket import  bk_ib
 
 reqId = {}
 
@@ -74,7 +74,7 @@ api_key = os.getenv("POLYGON_API_KEY")
 from polygon import RESTClient
 
 from polygon.rest.models import TickerDetails
-from polygon.rest.reference  import *
+from polygon.rest.reference  import Ticker
 from polygon.exceptions import BadResponse
 API_KEY   = os.getenv("POLYGON_API_KEY")
 poly_bad_response = BadResponse()
@@ -107,6 +107,7 @@ risk_amount = float(os.getenv("WEBHOOK_PNL_THRESHOLD", "-300"))
 client_id = int(os.getenv("FAST_API_CLIENT_ID", "2222"))
 ib_host = os.getenv("IB_GATEWAY_HOST", "127.0.0.1")
 ib_port = int(os.getenv("TBOT_IBKR_PORT", "4002"))
+boofMsg = os.getenv("HELLO_MSG")
 
 ib_connection = IBConnection(None)
 ib= ib_connection.ib
@@ -284,8 +285,8 @@ async def webhook(request: Request):
         logger.warning(f"No events triggered for webhook request {payload}")
     else:
         logger.info(f"Triggered events: {fired}")
-        logger.info(f"client IP: {request.client.host}")
-        ip = request.headers.get("X-Forwarded-For", request.client.host)
+        logger.info(f"client IP: {request.client}")
+        ip = request.headers.get("X-Forwarded-For", request.client)
         logger.info(f"client IP: {ip}")
 
 
@@ -322,7 +323,7 @@ async def gpt_prices(symbol: str):
 
         barSizeSetting = "1 min"  # default bar size setting
 
-        contract: Contract = None
+        contract=None
         contract,snapshot = await add_new_contract(symbol, barSizeSetting, ib)
 
         # Check if the contract was successfully created
@@ -331,7 +332,7 @@ async def gpt_prices(symbol: str):
             return JSONResponse(content={"error": f"Failed to create contract for {symbol}"}, status_code=400)
 
         # --- inside gpt_prices() -----------------------------------------------
-        analysis = await gpt_data(contract, ib, polyData=False)
+        analysis = await gpt_data(contract, ib)
 
 
         result_raw = {
@@ -351,37 +352,28 @@ async def gpt_prices(symbol: str):
         raise HTTPException(status_code=500, detail=str(e))
 @app.get("/api/cancel-all-orders")
 async def cancel_all_orders():
-    openTrades = None
+    canceled_orders = []
+    
     ib.reqGlobalCancel()
     logger.info("reqGlobalCancel Canceling all orders...")
 
     
 
-    openTrades =  ib.openTrades()
-    if openTrades is None or len(openTrades) == 0:
+    canceled_orders =  ib.openTrades()
+    if canceled_orders is None or len(canceled_orders) == 0:
         logger.info("No open trades to cancel.")
         return JSONResponse(content={"status": "success", "message": "No open trades to cancel."}, status_code=200)
-    status = await on_cancel_order(openTrades)
-    status_json = jsonable_encoder(status)
-
-    return JSONResponse(content=status_json, status_code=200)
-
-async def on_cancel_order(openTrades) -> bool:
-    canceled_trades = None
-    canceled= None
+    else:
+        logger.info(f"Canceled {len(canceled_orders)} open trades.")
+        for order in canceled_orders:
+            logger.info(f"Canceled order: {order}")
+            ib.cancelOrder(order.order)
+            order=jsonable_encoder(order)
     
-    for trade in openTrades:
 
-        symbol= trade.contract.symbol
-        if trade.orderStatus.status != "Cancelled":
-            
-            canceled=ib.cancelOrder(trade.order)
-            canceled_trades=canceled
-            
-            logger.info(f"Canceling orders: {trade.orderStatus.status}")
-            await asyncio.sleep(1)
-            if canceled:
-                return canceled_trades
+    return JSONResponse(content=order, status_code=200)
+
+
     
  
 async def get_positions():
@@ -406,7 +398,7 @@ async def get_positions():
 
 
 
-async def process_close_all(contract: Contract, req: OrderRequest, barSizeSetting: str, snapshot: PriceSnapshot = None) -> JSONResponse   :
+async def process_close_all(contract: Contract, req: OrderRequest, barSizeSetting: str, snapshot: PriceSnapshot) -> JSONResponse   :
     try:
         symbol = contract.symbol 
         snapshot = await price_data_dict.get_snapshot(symbol)
@@ -438,11 +430,11 @@ async def process_close_all(contract: Contract, req: OrderRequest, barSizeSettin
                 parent_ids[symbol] =openOrder.orderId
 
             if openOrder.orderId == parent_id:
-                open_order: Order = openOrder
+             
                 logger.info(f"Open order found for {symbol} with action {openOrder.action} and quantity {openOrder.totalQuantity}")
-                result = ib.cancelOrder(open_order)
+                result = ib.cancelOrder(openOrder)
                 if result:
-                    logger.info(f"Order {open_order.orderId} cancelled successfully for open_order {open_order}")
+                    logger.info(f"Order {openOrder.orderId} cancelled successfully for open_order {openOrder}")
                 
                   
         for pos in positions:
@@ -504,11 +496,11 @@ async def process_close_all(contract: Contract, req: OrderRequest, barSizeSettin
                 
             
                 "quantity": totalQuantity,
-                "rewardRiskRatio": symbol.rewardRiskRatio,
-                "riskPercentage": symbol.riskPercentage,
-                "accountBalance": symbol.accountBalance,
-                "stopType": symbol.stopType,
-                "atrFactor": symbol.atrFactor,
+                "rewardRiskRatio": req.rewardRiskRatio,
+                "riskPercentage": req.riskPercentage,
+                "accountBalance": req.accountBalance,
+                "stopType": req.stopType,
+                "atrFactor": req.atrFactor,
             }
             logger.info(format_order_details_table(order_json))
             web_request_json =jsonable_encoder(order_json)
