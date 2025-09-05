@@ -1,17 +1,78 @@
-version: "3.4"
+
+
+networks:
+  internal:
+    driver: bridge
 
 services:
   ib-gateway:
-    restart: always
+    container_name: ib-gateway
+    restart: unless-stopped
     build:
-      context: ./latest
+      context: /home/dev/.vscode-server/data/Machine/ib-gateway-docker/latest
+    env_file:
+      - .env
+    
+    # ZeroTier requirements per official documentation:  ib-gateway-docker/docker-compose.yml
+
+    # docker compose -f ./docker-compose.yml up -d --build
+    #/home/dev/.vscode-server/data/Machine/trading-app/ib-gateway-docker/latest" not found
+    # https://docs.zerotier.com/docker/
+    # - NET_ADMIN: Required for network configuration
+    # - SYS_ADMIN: Required for ioctl() to put /dev/net/tun in tap mode
+    # - /dev/net/tun: Required for ZeroTier virtual networking
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    
     environment:
+      # ZeroTier Network Configuration
+      ZEROTIER_NETWORK_ID: ${ZEROTIER_NETWORK_ID}
+      
+      # IB Gateway Configuration
       TWS_USERID: ${TWS_USERID}
       TWS_PASSWORD: ${TWS_PASSWORD}
       TRADING_MODE: ${TRADING_MODE:-paper}
       READ_ONLY_API: ${READ_ONLY_API:-}
       VNC_SERVER_PASSWORD: ${VNC_SERVER_PASSWORD:-}
+      TWOFA_TIMEOUT_ACTION: ${TWOFA_TIMEOUT_ACTION:-restart}
+      TZ: ${TZ:-America/New_York}
+    
+    volumes:
+      # ZeroTier configuration persistence (per official docs)
+      - zerotier_data:/var/lib/zerotier-one
+      
+      # IB Gateway data persistence
+      - ib_logs:/root/Jts/Logs
+      - ib_settings:/root/ibc
+    
     ports:
-      - "127.0.0.1:4001:4001"
-      - "127.0.0.1:4002:4002"
-      - "127.0.0.1:5900:5900"
+      # IB Gateway API ports
+      - "127.0.0.1:4001:4001"  # Live trading API
+      - "127.0.0.1:4002:4002"  # Paper trading API
+      - "127.0.0.1:4003:4003"  # Additional API port
+      
+      # VNC access (optional - for debugging GUI)
+      - "5900:5900"
+    
+    networks:
+      - internal
+    
+    # Health check to ensure both services are running
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pgrep zerotier-one && (netstat -an | grep -q 4002 || echo 'IB Gateway starting')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+# Named volumes for data persistence
+volumes:
+  zerotier_data:
+    driver: local
+  ib_logs:
+    driver: local
+  ib_settings:
+    driver: local
