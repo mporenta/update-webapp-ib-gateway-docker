@@ -1,0 +1,17 @@
+pathlib
+ib_async
+dotenv
+loguru
+numpy
+pandas
+dataclasses
+polygon-api-client
+aiohttp
+asyncio
+pytz
+aiosqlite
+uvicorn
+fastapi
+pydantic
+ntplib
+watchfiles

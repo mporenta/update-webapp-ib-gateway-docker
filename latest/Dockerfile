@@ -130,5 +130,6 @@ ENV TWS_MAJOR_VRSN=${IB_GATEWAY_VERSION} \
     IBC_INI=/root/ibc/config.ini \
     TWOFA_TIMEOUT_ACTION=exit
 
-# Use the startup script
+
+# Use the startup script app/ib-gateway-docker/latest/requirements.txt
 CMD ["/bin/bash", "/root/start-container.sh"]
