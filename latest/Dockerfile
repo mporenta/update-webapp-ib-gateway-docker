@@ -1,6 +1,6 @@
 FROM ubuntu:25.04 AS setup
 
-ENV IB_GATEWAY_VERSION=10.37.1k
+ENV IB_GATEWAY_VERSION=10.40.1d
 ENV IB_GATEWAY_RELEASE_CHANNEL=latest
 ENV IBC_VERSION=3.23.0
 ENV DEBIAN_FRONTEND=noninteractive
@@ -12,21 +12,21 @@ RUN apt-get install --no-install-recommends --yes \
     tzdata \
     ca-certificates \
     unzip
-
 WORKDIR /tmp/setup
 RUN echo 'https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-'${IB_GATEWAY_RELEASE_CHANNEL}'%40'${IB_GATEWAY_VERSION}'/ibgateway-'${IB_GATEWAY_VERSION}'-standalone-linux-x64.sh' 
-# Install IB Gateway
+# Install IB Gateway https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-latest%4010.40.1d/ibgateway-10.40.1d-standalone-linux-x64.sh
+
 # Use this instead of "RUN curl .." to install a local file: 
-#https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-stable%4010.37.1k/ibgateway-10.37.1k-standalone-linux-x64.sh
-#https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-latest%4010.37.1k/ibgateway-10.37.1k-standalone-linux-x64.sh
-#COPY ibgateway-10.37.1k-standalone-linux-x64.sh .
-RUN curl -sSL https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-stable%4010.37.1k/ibgateway-10.37.1k-standalone-linux-x64.sh \
-    --output ibgateway-10.37.1k-standalone-linux-x64.sh
-RUN curl -sSL https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-stable%4010.37.1k/ibgateway-10.37.1k-standalone-linux-x64.sh.sha256 \
-    --output ibgateway-10.37.1k-standalone-linux-x64.sh.sha256
-RUN sha256sum --check ./ibgateway-10.37.1k-standalone-linux-x64.sh.sha256
-RUN chmod a+x ./ibgateway-10.37.1k-standalone-linux-x64.sh
-RUN ./ibgateway-10.37.1k-standalone-linux-x64.sh -q -dir /root/Jts/ibgateway/${IB_GATEWAY_VERSION}
+#https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-stable%4010.37.1k/ibgateway-10.40.1d-standalone-linux-x64.sh
+#https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-latest%4010.37.1k/ibgateway-10.40.1d-standalone-linux-x64.sh
+#COPY ibgateway-10.40.1d-standalone-linux-x64.sh .
+RUN curl -sSL https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-latest%4010.40.1d/ibgateway-10.40.1d-standalone-linux-x64.sh \
+    --output ibgateway-10.40.1d-standalone-linux-x64.sh
+RUN curl -sSL https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-latest%4010.40.1d/ibgateway-10.40.1d-standalone-linux-x64.sh.sha256 \
+    --output ibgateway-10.40.1d-standalone-linux-x64.sh.sha256
+RUN sha256sum --check ./ibgateway-10.40.1d-standalone-linux-x64.sh.sha256
+RUN chmod a+x ./ibgateway-10.40.1d-standalone-linux-x64.sh
+RUN ./ibgateway-10.40.1d-standalone-linux-x64.sh -q -dir /root/Jts/ibgateway/${IB_GATEWAY_VERSION}
 COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
 
 # Install IBC
@@ -46,7 +46,7 @@ COPY ./scripts /root/scripts
 
 FROM ubuntu:22.04
 
-ENV IB_GATEWAY_VERSION=10.37.1k
+ENV IB_GATEWAY_VERSION=10.40.1d
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /root
