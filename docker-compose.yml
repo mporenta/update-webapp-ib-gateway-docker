@@ -9,7 +9,7 @@ services:
     container_name: ib-gateway
     restart: unless-stopped
     build:
-      context: /home/dev/.vscode-server/data/Machine/ib-gateway-docker/latest
+      context: ./latest
     env_file:
       - .env
     
