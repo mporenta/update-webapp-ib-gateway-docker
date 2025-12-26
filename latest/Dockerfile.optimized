@@ -9,11 +9,11 @@
 
 FROM ubuntu:22.04 AS setup
 
-ARG IB_GATEWAY_VERSION=10.42.1a
-ARG IB_GATEWAY_RELEASE_CHANNEL=latest
-ARG IBC_VERSION=3.23.0
-
-ENV DEBIAN_FRONTEND=noninteractive
+# Use ENV for variables needed in RUN commands (ARG not interpolated in shell)
+ENV IB_GATEWAY_VERSION=10.42.1a \
+    IB_GATEWAY_RELEASE_CHANNEL=latest \
+    IBC_VERSION=3.23.0 \
+    DEBIAN_FRONTEND=noninteractive
 
 # Single RUN for all setup downloads to reduce layers
 RUN ln -fs /usr/share/zoneinfo/UTC /etc/localtime && echo "UTC" > /etc/timezone && \
@@ -21,16 +21,17 @@ RUN ln -fs /usr/share/zoneinfo/UTC /etc/localtime && echo "UTC" > /etc/timezone 
     apt-get install --no-install-recommends -y curl ca-certificates unzip && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /tmp/setup && cd /tmp/setup && \
-    # Download and install IB Gateway
-    curl -sSL "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" \
-    -o ibgateway-installer.sh && \
-    curl -sSL "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256" \
-    -o ibgateway-installer.sh.sha256 && \
-    sha256sum --check ibgateway-installer.sh.sha256 && \
-    chmod a+x ibgateway-installer.sh && \
-    ./ibgateway-installer.sh -q -dir /root/Jts/ibgateway/${IB_GATEWAY_VERSION} && \
+    # Download IB Gateway installer (use original filename for sha256 check)
+    echo "Downloading IB Gateway ${IB_GATEWAY_VERSION}..." && \
+    curl -fSL -o "ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" \
+        "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" && \
+    curl -fSL -o "ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256" \
+        "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256" && \
+    sha256sum --check "ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256" && \
+    chmod a+x "ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" && \
+    ./"ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" -q -dir /root/Jts/ibgateway/${IB_GATEWAY_VERSION} && \
     # Download and install IBC
-    curl -sSL "https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip" -o ibc.zip && \
+    curl -fSL -o ibc.zip "https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip" && \
     mkdir -p /root/ibc && \
     unzip ibc.zip -d /root/ibc && \
     chmod -R u+x /root/ibc/*.sh /root/ibc/scripts/*.sh && \
