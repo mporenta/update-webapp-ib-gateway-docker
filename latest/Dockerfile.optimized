@@ -24,9 +24,9 @@ RUN ln -fs /usr/share/zoneinfo/UTC /etc/localtime && echo "UTC" > /etc/timezone 
     # Download IB Gateway installer (use original filename for sha256 check)
     echo "Downloading IB Gateway ${IB_GATEWAY_VERSION}..." && \
     curl -fSL -o "ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" \
-        "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" && \
+    "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" && \
     curl -fSL -o "ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256" \
-        "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256" && \
+    "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256" && \
     sha256sum --check "ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256" && \
     chmod a+x "ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" && \
     ./"ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" -q -dir /root/Jts/ibgateway/${IB_GATEWAY_VERSION} && \
@@ -48,7 +48,7 @@ COPY ./scripts /root/scripts
 FROM ubuntu:22.04
 
 ARG IB_GATEWAY_VERSION=10.42.1a
-ARG ENABLE_ZEROTIER=false
+ARG ENABLE_ZEROTIER=true
 
 ENV DEBIAN_FRONTEND=noninteractive \
     IB_GATEWAY_VERSION=${IB_GATEWAY_VERSION} \
@@ -107,12 +107,42 @@ RUN echo '#!/bin/bash\n\
     /root/scripts/run_x11_vnc.sh &\n\
     fi\n\
     \n\
-    # ZeroTier (if enabled)\n\
-    if [ -f /usr/sbin/zerotier-one ] && [ -n "$ZEROTIER_NETWORK_ID" ]; then\n\
-    echo "Starting ZeroTier..."\n\
+    # ZeroTier (if installed)\n\
+    if [ -f /usr/sbin/zerotier-one ]; then\n\
+    echo "=== Starting ZeroTier ==="\n\
     /usr/sbin/zerotier-one -d\n\
-    sleep 3\n\
+    sleep 5\n\
+    if ! pgrep -x "zerotier-one" > /dev/null; then\n\
+    echo "ERROR: ZeroTier failed to start"\n\
+    exit 1\n\
+    fi\n\
+    echo "ZeroTier daemon started successfully"\n\
+    if [ -n "$ZEROTIER_NETWORK_ID" ]; then\n\
+    echo "Joining ZeroTier network: $ZEROTIER_NETWORK_ID"\n\
     /usr/sbin/zerotier-cli join "$ZEROTIER_NETWORK_ID" || true\n\
+    echo "Waiting for network assignment..."\n\
+    timeout=60\n\
+    while [ $timeout -gt 0 ]; do\n\
+    NETWORK_STATUS=$(/usr/sbin/zerotier-cli listnetworks | grep "$ZEROTIER_NETWORK_ID" || echo "")\n\
+    if [ -n "$NETWORK_STATUS" ]; then\n\
+    echo "Network joined successfully:"\n\
+    /usr/sbin/zerotier-cli listnetworks\n\
+    break\n\
+    fi\n\
+    sleep 2\n\
+    timeout=$((timeout-2))\n\
+    done\n\
+    ASSIGNED_IP=$(/usr/sbin/zerotier-cli listnetworks | grep "$ZEROTIER_NETWORK_ID" | awk "{print \\$9}" | cut -d"/" -f1)\n\
+    if [ -n "$ASSIGNED_IP" ] && [ "$ASSIGNED_IP" != "-" ]; then\n\
+    echo "Assigned ZeroTier IP: $ASSIGNED_IP"\n\
+    echo "Configure your client to connect to: $ASSIGNED_IP:4002"\n\
+    else\n\
+    echo "IP not yet assigned. Authorize this device in ZeroTier Central."\n\
+    fi\n\
+    else\n\
+    echo "ZEROTIER_NETWORK_ID not provided, skipping network join"\n\
+    fi\n\
+    echo "=== ZeroTier setup complete ==="\n\
     fi\n\
     \n\
     # Generate IBC config\n\
