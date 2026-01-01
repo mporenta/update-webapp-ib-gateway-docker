@@ -1,0 +1,83 @@
+# --- STAGE 1: Builder ---
+FROM ubuntu:24.04 AS setup
+
+ARG IB_GATEWAY_VERSION=latest
+ARG IBC_VERSION=3.23.0
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp/setup
+
+# Resolve "latest" -> concrete version (writes /tmp/IB_GATEWAY_VERSION)
+RUN set -e; \
+    if [ "$IB_GATEWAY_VERSION" = "latest" ]; then \
+    TAG="$(curl -fsSL https://api.github.com/repos/gnzsnz/ib-gateway-docker/releases/latest | grep -oP '"tag_name"\\s*:\\s*"\\K[^"]+')"; \
+    IB_GATEWAY_VERSION="${TAG#ibgateway-latest@}"; \
+    fi; \
+    echo "$IB_GATEWAY_VERSION" > /tmp/IB_GATEWAY_VERSION
+
+# 1) Download & verify using the resolved version
+RUN set -e; \
+    IB_GATEWAY_VERSION="$(cat /tmp/IB_GATEWAY_VERSION)"; \
+    curl -fsSL "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-latest%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh" -o gateway.sh && \
+    curl -fsSL "https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-latest%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256" -o gateway.sh.sha256 && \
+    sed -i 's/.*ibgateway.*.sh/gateway.sh/' gateway.sh.sha256 && \
+    sha256sum --check gateway.sh.sha256 && \
+    chmod a+x gateway.sh && \
+    ./gateway.sh -q -dir /root/Jts/ibgateway/${IB_GATEWAY_VERSION} && \
+    echo "${IB_GATEWAY_VERSION}" > /root/Jts/ibgateway/VERSION
+
+# 2) Install IBC
+RUN curl -fsSL "https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip" -o ibc.zip && \
+    mkdir -p /root/ibc && unzip ibc.zip -d /root/ibc && \
+    chmod -R u+x /root/ibc/*.sh /root/ibc/scripts/*.sh
+
+
+# --- STAGE 2: Final Runtime ---
+FROM ubuntu:22.04
+
+ENV IB_GATEWAY_VERSION=10.40.1d \
+    DEBIAN_FRONTEND=noninteractive \
+    TWS_MAJOR_VRSN=1040
+
+# Optimization: Keep libxslt1.1 but restore libgtk2.0-bin (needed for some IBKR UI hooks even in headless)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xvfb libxslt1.1 libxrender1 libxtst6 libxi6 libgtk2.0-bin \
+    socat x11vnc curl gnupg lsb-release net-tools iproute2 procps ca-certificates gettext \
+    && curl -s https://install.zerotier.com | bash \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /root
+
+# Copy installed files from Stage 1
+COPY --from=setup /root/ .
+COPY --from=setup /usr/local/i4j_jres/ /usr/local/i4j_jres/
+
+# Restore the missing logic from the original:
+# These local files MUST exist in your context folder
+COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
+COPY ./config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
+COPY ./scripts /root/scripts
+RUN chmod +x /root/scripts/*.sh
+
+# Re-inject the ZeroTier + IBC startup script logic
+RUN echo '#!/bin/bash\n\
+    set -e\n\
+    /usr/sbin/zerotier-one -d\n\
+    sleep 5\n\
+    if [ -n "$ZEROTIER_NETWORK_ID" ]; then\n\
+    /usr/sbin/zerotier-cli join "$ZEROTIER_NETWORK_ID"\n\
+    fi\n\
+    exec /root/scripts/run.sh' > /root/start-container.sh && chmod +x /root/start-container.sh
+
+# Environment & Persistence
+VOLUME ["/var/lib/zerotier-one"]
+ENV TWS_PATH=/root/Jts \
+    IBC_PATH=/root/ibc \
+    IBC_INI=/root/ibc/config.ini \
+    TWOFA_TIMEOUT_ACTION=restart
+
+CMD ["/bin/bash", "/root/start-container.sh"]
