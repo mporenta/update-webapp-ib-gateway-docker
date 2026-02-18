@@ -8,7 +8,7 @@
 # - Aggressive cleanup
 
 FROM ubuntu:22.04 AS setup
-
+RUN echo  "🔥 Jengo  Building the image... Installing dependencies..."
 # Use ENV for variables needed in RUN commands (ARG not interpolated in shell)
 ENV IB_GATEWAY_VERSION=10.42.1a \
     IB_GATEWAY_RELEASE_CHANNEL=latest \
@@ -41,7 +41,7 @@ RUN ln -fs /usr/share/zoneinfo/UTC /etc/localtime && echo "UTC" > /etc/timezone 
 COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
 COPY ./config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
 COPY ./scripts /root/scripts
-
+RUN echo  "🔥 Jengo  Building the image... Installing dependencies..."
 #
 # Production Stage
 #
@@ -56,7 +56,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     JAVA_TOOL_OPTIONS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseStringDeduplication -XX:+DisableExplicitGC -Djava.awt.headless=false"
 
 WORKDIR /root
-
+RUN echo  "🔥 Jengo  Building the image... Installing dependencies..."
 # Install minimal runtime dependencies including Python 3.12
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y \
@@ -81,7 +81,9 @@ RUN apt-get update -y && \
     x11vnc && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
-
+RUN python3.12 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN . /opt/venv/bin/activate
 # Optional ZeroTier installation
 RUN if [ "$ENABLE_ZEROTIER" = "true" ]; then \
     apt-get update -y && \
@@ -97,6 +99,11 @@ COPY --from=setup /root/scripts /root/scripts
 COPY --from=setup /usr/local/i4j_jres /usr/local/i4j_jres
 
 RUN chmod a+x /root/scripts/*.sh
+RUN echo  "🔥 Jengo  Pipping with pip."
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install ib_async && \
+    echo "Finished Python package installation"
 
 # Optimized run script with smaller Xvfb display
 RUN echo '#!/bin/bash\n\
