@@ -6,9 +6,51 @@
 # - Optional ZeroTier (disabled by default)
 # - Smaller image via combined RUN statements
 # - Aggressive cleanup
+# - Embedded cpp-layer runtime in the ib-gateway container
+
+FROM ubuntu:22.04 AS cpp_builder
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    g++ \
+    curl \
+    unzip \
+    ca-certificates \
+    libhiredis-dev \
+    libprotobuf-dev \
+    cmake \
+    libintelrdfpmath-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG IBKR_TWSAPI_VER=1042.01
+ENV IBKR_TWSAPI_DIR=/opt/ibkr
+
+RUN --mount=type=cache,target=/root/.cache/ibkr-twsapi \
+    set -eux; \
+    mkdir -p "${IBKR_TWSAPI_DIR}"; \
+    ZIP="/root/.cache/ibkr-twsapi/twsapi_macunix.${IBKR_TWSAPI_VER}.zip"; \
+    if [ ! -s "$ZIP" ]; then \
+    curl -fsSL -o "$ZIP" "https://interactivebrokers.github.io/downloads/twsapi_macunix.${IBKR_TWSAPI_VER}.zip"; \
+    fi; \
+    rm -rf "${IBKR_TWSAPI_DIR:?}"/*; \
+    unzip -q "$ZIP" -d "${IBKR_TWSAPI_DIR}"
+
+WORKDIR /build
+COPY cpp_layer ./cpp_layer
+
+RUN rm -rf ./cpp_layer/deps/IBJts && cp -r ${IBKR_TWSAPI_DIR}/IBJts ./cpp_layer/deps/
+
+WORKDIR /build/cpp_layer
+RUN rm -rf build && \
+    mkdir -p build && \
+    cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF && \
+    cmake --build . -j$(nproc)
 
 FROM ubuntu:22.04 AS setup
-RUN echo  "🔥 Jengo  Building the image... Installing dependencies..."
+RUN echo "🔥 Jengo  Building the image... Installing dependencies..."
+
 # Use ENV for variables needed in RUN commands (ARG not interpolated in shell)
 ENV IB_GATEWAY_VERSION=10.42.1a \
     IB_GATEWAY_RELEASE_CHANNEL=latest \
@@ -38,13 +80,10 @@ RUN ln -fs /usr/share/zoneinfo/UTC /etc/localtime && echo "UTC" > /etc/timezone 
     # Cleanup
     rm -rf /tmp/setup /var/cache/apt/*
 
-COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
-COPY ./config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
-COPY ./scripts /root/scripts
-RUN echo  "🔥 Jengo  Building the image... Installing dependencies..."
-#
-# Production Stage
-#
+COPY ib-gateway-docker/latest/config/ibgateway/jts.ini /root/Jts/jts.ini
+COPY ib-gateway-docker/latest/config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
+COPY ib-gateway-docker/latest/scripts /root/scripts
+
 FROM ubuntu:22.04
 
 ARG IB_GATEWAY_VERSION=10.42.1a
@@ -56,8 +95,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     JAVA_TOOL_OPTIONS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseStringDeduplication -XX:+DisableExplicitGC -Djava.awt.headless=false"
 
 WORKDIR /root
-RUN echo  "🔥 Jengo  Building the image... Installing dependencies..."
-# Install minimal runtime dependencies including Python 3.12
+RUN echo "🔥 Jengo  Building the image... Installing dependencies..."
+
+# Install minimal runtime dependencies including Python 3.12 + cpp-layer runtime deps
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y \
     software-properties-common \
@@ -78,12 +118,17 @@ RUN apt-get update -y && \
     socat \
     procps \
     ca-certificates \
-    x11vnc && \
+    curl \
+    x11vnc \
+    libhiredis0.14 \
+    libprotobuf23 && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
+
 RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN . /opt/venv/bin/activate
+
 # Optional ZeroTier installation
 RUN if [ "$ENABLE_ZEROTIER" = "true" ]; then \
     apt-get update -y && \
@@ -98,91 +143,30 @@ COPY --from=setup /root/ibc /root/ibc
 COPY --from=setup /root/scripts /root/scripts
 COPY --from=setup /usr/local/i4j_jres /usr/local/i4j_jres
 
-RUN chmod a+x /root/scripts/*.sh
-RUN echo  "🔥 Jengo  Pipping with pip."
+# Copy cpp-layer server binary from cpp builder stage
+COPY --from=cpp_builder /build/cpp_layer/build/ib_data_server /app/ib_data_server
+
+RUN chmod a+x /root/scripts/*.sh /app/ib_data_server
+RUN echo "🔥 Jengo  Pipping with pip."
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip && \
     pip install ib_async && \
     echo "Finished Python package installation"
 
-# Optimized run script with smaller Xvfb display
-RUN echo '#!/bin/bash\n\
-    set -e\n\
-    export DISPLAY=:1\n\
-    \n\
-    # Cleanup stale locks\n\
-    rm -f /tmp/.X1-lock\n\
-    \n\
-    # Start Xvfb with minimal resources (800x600, 8-bit color)\n\
-    Xvfb :1 -ac -screen 0 800x600x8 -nolisten tcp +extension GLX &\n\
-    \n\
-    # Optional VNC\n\
-    if [ -n "$VNC_SERVER_PASSWORD" ]; then\n\
-    echo "Starting VNC server"\n\
-    /root/scripts/run_x11_vnc.sh &\n\
-    fi\n\
-    \n\
-    # ZeroTier (if installed)\n\
-    if [ -f /usr/sbin/zerotier-one ]; then\n\
-    echo "=== Starting ZeroTier ==="\n\
-    /usr/sbin/zerotier-one -d\n\
-    sleep 5\n\
-    if ! pgrep -x "zerotier-one" > /dev/null; then\n\
-    echo "ERROR: ZeroTier failed to start"\n\
-    exit 1\n\
-    fi\n\
-    echo "ZeroTier daemon started successfully"\n\
-    if [ -n "$ZEROTIER_NETWORK_ID" ]; then\n\
-    echo "Joining ZeroTier network: $ZEROTIER_NETWORK_ID"\n\
-    /usr/sbin/zerotier-cli join "$ZEROTIER_NETWORK_ID" || true\n\
-    echo "Waiting for network assignment..."\n\
-    timeout=60\n\
-    while [ $timeout -gt 0 ]; do\n\
-    NETWORK_STATUS=$(/usr/sbin/zerotier-cli listnetworks | grep "$ZEROTIER_NETWORK_ID" || echo "")\n\
-    if [ -n "$NETWORK_STATUS" ]; then\n\
-    echo "Network joined successfully:"\n\
-    /usr/sbin/zerotier-cli listnetworks\n\
-    break\n\
-    fi\n\
-    sleep 2\n\
-    timeout=$((timeout-2))\n\
-    done\n\
-    ASSIGNED_IP=$(/usr/sbin/zerotier-cli listnetworks | grep "$ZEROTIER_NETWORK_ID" | awk "{print \\$9}" | cut -d"/" -f1)\n\
-    if [ -n "$ASSIGNED_IP" ] && [ "$ASSIGNED_IP" != "-" ]; then\n\
-    echo "Assigned ZeroTier IP: $ASSIGNED_IP"\n\
-    echo "Configure your client to connect to: $ASSIGNED_IP:4002"\n\
-    else\n\
-    echo "IP not yet assigned. Authorize this device in ZeroTier Central."\n\
-    fi\n\
-    else\n\
-    echo "ZEROTIER_NETWORK_ID not provided, skipping network join"\n\
-    fi\n\
-    echo "=== ZeroTier setup complete ==="\n\
-    fi\n\
-    \n\
-    # Generate IBC config\n\
-    envsubst < "${IBC_INI}.tmpl" > "${IBC_INI}"\n\
-    \n\
-    # Start port forwarder\n\
-    /root/scripts/fork_ports_delayed.sh &\n\
-    \n\
-    # Start IB Gateway\n\
-    exec /root/ibc/scripts/ibcstart.sh "${TWS_MAJOR_VRSN}" -g \\\n\
-    "--tws-path=${TWS_PATH}" \\\n\
-    "--ibc-path=${IBC_PATH}" "--ibc-ini=${IBC_INI}" \\\n\
-    "--user=${TWS_USERID}" "--pw=${TWS_PASSWORD}" "--mode=${TRADING_MODE}" \\\n\
-    "--on2fatimeout=${TWOFA_TIMEOUT_ACTION}"\n\
-    ' > /root/start-optimized.sh && chmod +x /root/start-optimized.sh
-
-# IBC environment
+# IBC + embedded cpp-layer defaults
 ENV TWS_MAJOR_VRSN=${IB_GATEWAY_VERSION} \
     TWS_PATH=/root/Jts \
     IBC_PATH=/root/ibc \
     IBC_INI=/root/ibc/config.ini \
-    TWOFA_TIMEOUT_ACTION=exit
+    TWOFA_TIMEOUT_ACTION=exit \
+    CPP_IB_GATEWAY_HOST=localhost \
+    CPP_IB_GATEWAY_PORT=4002 \
+    CPP_HTTP_PORT=8088 \
+    CPP_IB_CLIENT_ID=99 \
+    CPP_REDIS_HOST=redis \
+    CPP_REDIS_PORT=6379
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD pgrep -f "ibgateway" > /dev/null || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD /root/scripts/ib_and_cpp_health_check.sh
 
-CMD ["/bin/bash", "/root/start-optimized.sh"]
+CMD ["/bin/bash", "/root/scripts/start_with_cpp.sh"]
