@@ -1,3 +1,0 @@
-[submodule "ib-gateway-docker"]
-	path = ib-gateway-docker
-	url = https://github.com/mporenta/update-webapp-ib-gateway-docker
