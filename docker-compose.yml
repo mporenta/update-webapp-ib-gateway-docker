@@ -8,10 +8,14 @@ services:
   ib-gateway:
     container_name: ib-gateway
     restart: unless-stopped
+    platform: ${IB_GATEWAY_PLATFORM:-linux/arm64}
     build:
       context: ./latest
+      dockerfile: Dockerfile_v2.optimized
+      args:
+        ENABLE_ZEROTIER: ${ENABLE_ZEROTIER:-true}
     env_file:
-      - .env
+      - ../.env.local
     
     # ZeroTier requirements per official documentation:  ib-gateway-docker/docker-compose.yml
 
@@ -28,17 +32,7 @@ services:
       - /dev/net/tun:/dev/net/tun
     
     environment:
-      # ZeroTier Network Configuration
-      ZEROTIER_NETWORK_ID: ${ZEROTIER_NETWORK_ID}
-      
-      # IB Gateway Configuration
-      TWS_USERID: ${TWS_USERID}
-      TWS_PASSWORD: ${TWS_PASSWORD}
-      TRADING_MODE: ${TRADING_MODE:-paper}
-      READ_ONLY_API: ${READ_ONLY_API:-}
-      VNC_SERVER_PASSWORD: ${VNC_SERVER_PASSWORD:-}
-      TWOFA_TIMEOUT_ACTION: ${TWOFA_TIMEOUT_ACTION:-restart}
-      TZ: ${TZ:-America/New_York}
+      ENABLE_ZEROTIER: ${ENABLE_ZEROTIER:-true}
     
     volumes:
       # ZeroTier configuration persistence (per official docs)
@@ -62,7 +56,7 @@ services:
     
     # Health check to ensure both services are running
     healthcheck:
-      test: ["CMD", "sh", "-c", "pgrep zerotier-one && (netstat -an | grep -q 4002 || echo 'IB Gateway starting')"]
+      test: ["CMD-SHELL", "pgrep -f 'ibgateway|ibcstart\\.sh|jts' >/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 5
