@@ -27,14 +27,14 @@ RUN set -eux; \
     chmod -R u+x /root/ibc/*.sh /root/ibc/scripts/*.sh && \
     rm -rf /tmp/setup /var/cache/apt/*
 
-COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
-COPY ./config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
-COPY ./scripts /root/scripts
+COPY update-webapp-ib-gateway-docker/latest/config/ibgateway/jts.ini /root/Jts/jts.ini
+COPY update-webapp-ib-gateway-docker/latest/config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
+COPY update-webapp-ib-gateway-docker/latest/scripts /root/scripts
 
 FROM ubuntu:22.04 AS cpp_builder
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -y && apt-get install --no-install-recommends -y \
-    g++ cmake pkg-config wget ca-certificates unzip \
+    g++ make cmake pkg-config wget ca-certificates unzip \
     libboost-dev libhiredis-dev libssl-dev \
     libprotobuf-dev protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
@@ -48,7 +48,8 @@ WORKDIR /build
 COPY cpp/CMakeLists.txt .
 COPY cpp/src/ src/
 COPY cpp/deps/ deps/
-RUN cp -r /tmp/twsapi/IBJts src/deps/IBJts && \
+RUN rm -rf src/deps/IBJts && \
+    cp -r /tmp/twsapi/IBJts src/deps/IBJts && \
     cmake -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j$(nproc)
 
@@ -81,6 +82,8 @@ RUN apt-get update -y && \
     ca-certificates \
     curl \
     tini \
+    libprotobuf23 \
+    libhiredis0.14 \
     x11vnc \
     net-tools && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
