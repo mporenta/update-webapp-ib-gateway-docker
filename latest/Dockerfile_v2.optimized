@@ -1,0 +1,120 @@
+FROM ubuntu:22.04 AS setup
+
+ARG TARGETARCH
+ARG IB_GATEWAY_VERSION=10.42.1a
+ARG IBC_VERSION=3.23.0
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN ln -fs /usr/share/zoneinfo/UTC /etc/localtime && echo "UTC" > /etc/timezone && \
+    apt-get update -y && \
+    apt-get install --no-install-recommends -y curl ca-certificates unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      arm64) installer_url="https://download2.interactivebrokers.com/installers/ibgateway/latest-standalone/ibgateway-latest-standalone-linux-arm.sh" ;; \
+      amd64) installer_url="https://download2.interactivebrokers.com/installers/ibgateway/latest-standalone/ibgateway-latest-standalone-linux-x64.sh" ;; \
+      *) echo "Unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    mkdir -p /tmp/setup && cd /tmp/setup && \
+    curl -fsSL -o ibgateway-installer.sh "${installer_url}" && \
+    chmod a+x ibgateway-installer.sh && \
+    ./ibgateway-installer.sh -q -dir /root/Jts/ibgateway/${IB_GATEWAY_VERSION} && \
+    curl -fsSL -o ibc.zip "https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip" && \
+    mkdir -p /root/ibc && \
+    unzip -q ibc.zip -d /root/ibc && \
+    chmod -R u+x /root/ibc/*.sh /root/ibc/scripts/*.sh && \
+    rm -rf /tmp/setup /var/cache/apt/*
+
+COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
+COPY ./config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
+COPY ./scripts /root/scripts
+
+FROM ubuntu:22.04 AS cpp_builder
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update -y && apt-get install --no-install-recommends -y \
+    g++ cmake pkg-config wget ca-certificates unzip \
+    libboost-dev libhiredis-dev libssl-dev \
+    libprotobuf-dev protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG IB_API_VERSION=1042.01
+RUN wget -q "https://interactivebrokers.github.io/downloads/twsapi_macunix.${IB_API_VERSION}.zip" \
+    -O /tmp/twsapi.zip && \
+    mkdir -p /tmp/twsapi && unzip /tmp/twsapi.zip -d /tmp/twsapi
+
+WORKDIR /build
+COPY cpp/CMakeLists.txt .
+COPY cpp/src/ src/
+COPY cpp/deps/ deps/
+RUN cp -r /tmp/twsapi/IBJts src/deps/IBJts && \
+    cmake -B build -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build build -j$(nproc)
+
+FROM ubuntu:22.04
+
+ARG IB_GATEWAY_VERSION=10.42.1a
+ARG ENABLE_ZEROTIER=true
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    ENABLE_ZEROTIER=${ENABLE_ZEROTIER} \
+    IB_GATEWAY_VERSION=${IB_GATEWAY_VERSION} \
+    JAVA_TOOL_OPTIONS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseStringDeduplication -XX:+DisableExplicitGC -Djava.awt.headless=false"
+
+WORKDIR /root
+
+RUN apt-get update -y && \
+    apt-get install --no-install-recommends -y \
+    python3 \
+    python3-venv \
+    python3-pip \
+    gettext \
+    xvfb \
+    libxslt1.1 \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    libgtk2.0-0 \
+    socat \
+    procps \
+    ca-certificates \
+    curl \
+    tini \
+    x11vnc \
+    net-tools && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
+
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN if [ "$ENABLE_ZEROTIER" = "true" ]; then \
+      apt-get update -y && \
+      apt-get install --no-install-recommends -y curl gnupg lsb-release iproute2 && \
+      curl -s https://install.zerotier.com | bash && \
+      rm -rf /var/lib/apt/lists/* /var/cache/apt/*; \
+    fi
+
+COPY --from=setup /root/Jts /root/Jts
+COPY --from=setup /root/ibc /root/ibc
+COPY --from=setup /root/scripts /root/scripts
+COPY --from=setup /usr/local/i4j_jres /usr/local/i4j_jres
+COPY --from=cpp_builder /build/build/ib_market_data /app/ib_market_data
+
+RUN chmod a+x /root/scripts/*.sh
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install ib_async
+
+ENV TWS_MAJOR_VRSN=${IB_GATEWAY_VERSION} \
+    TWS_PATH=/root/Jts \
+    IBC_PATH=/root/ibc \
+    IBC_INI=/root/ibc/config.ini \
+    TWOFA_TIMEOUT_ACTION=exit
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD pgrep -f "ibgateway|jts|ibcstart.sh" >/dev/null && \
+        curl -sf http://localhost:8088/ready >/dev/null || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/bin/bash", "/root/scripts/run.sh"]
