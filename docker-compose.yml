@@ -11,7 +11,7 @@ services:
     platform: ${IB_GATEWAY_PLATFORM:-linux/arm64}
     build:
       context: ./latest
-      dockerfile: Dockerfile_v2.optimized
+      dockerfile: Dockerfile
       args:
         ENABLE_ZEROTIER: ${ENABLE_ZEROTIER:-true}
     env_file:
